@@ -3,6 +3,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!localStorage.getItem('moura_leite_master_reset_v2')) {
         let allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         
+        // Ensure Admin exists in the global list
+        if (!allUsers.find(u => u.email === 'admin@mouraleite.com.br')) {
+            allUsers.push({
+                username: 'ADMIN',
+                email: 'admin@mouraleite.com.br',
+                points: 1500,
+                dept: 'Tecnologia',
+                rank: 'Consultor Ouro',
+                password: 'admin'
+            });
+        }
+
         allUsers.forEach(user => {
             if (user.email !== 'admin@mouraleite.com.br') {
                 user.points = 0;
@@ -38,13 +50,28 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.reload();
     }
 
-    // Load User Data from LocalStorage
+    // Load User Data from LocalStorage (Current Session)
     const storedUser = JSON.parse(localStorage.getItem('moura_leite_user')) || {
         username: 'Novo Colaborador',
         points: 0,
         rank: 'Iniciante',
         dept: 'Moura Leite'
     };
+
+    // Firebase Real-time Synchronization for Global Users
+    db.collection("users").onSnapshot((snapshot) => {
+        const usersArray = [];
+        snapshot.forEach((doc) => {
+            usersArray.push(doc.data());
+        });
+        
+        // Update local global list
+        localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
+        
+        // Re-render UI components that depend on global data
+        if (typeof updateRanking === 'function') updateRanking();
+        if (typeof renderAdminUsers === 'function') renderAdminUsers();
+    });
 
     // Visit Tracking & Date Helpers
     const now = new Date();
@@ -122,60 +149,65 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
     };
 
-    window.resetUserPassword = (email) => {
-        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
-        const user = allUsers.find(u => u.email === email);
-        if (user) {
-            const newPass = prompt(`Digite a nova senha para o usuário ${user.username}:`);
-            if (newPass) {
-                user.password = newPass;
-                localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
-                alert(`Senha do usuário ${user.username} alterada com sucesso!`);
-                addNotification(`Senha de ${user.username} resetada pelo administrador.`);
+    window.resetUserPassword = async (email) => {
+        const newPass = prompt(`Digite a nova senha para o usuário:`);
+        if (newPass) {
+            try {
+                await db.collection("users").doc(email).update({ password: newPass });
+                alert(`Senha alterada com sucesso!`);
+                addNotification(`Senha resetada pelo administrador.`);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao alterar senha.");
             }
         }
     };
 
-    window.toggleUserStatus = (email) => {
+    window.toggleUserStatus = async (email) => {
         const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         const user = allUsers.find(u => u.email === email);
         if (user) {
-            user.disabled = !user.disabled;
-            localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
-            renderAdminUsers();
-            addNotification(`Usuário ${user.username} ${user.disabled ? 'desativado' : 'ativado'}.`);
+            try {
+                await db.collection("users").doc(email).update({ disabled: !user.disabled });
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao alterar status.");
+            }
         }
     };
 
-    window.deleteUser = (email) => {
-        if (confirm(`Tem certeza que deseja excluir o usuário ${email}? Esta ação é irreversível.`)) {
-            let allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
-            allUsers = allUsers.filter(u => u.email !== email);
-            localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
-            renderAdminUsers();
-            addNotification(`Usuário ${email} excluído.`);
+    window.deleteUser = async (email) => {
+        if (confirm(`Tem certeza que deseja EXCLUIR permanentemente o usuário ${email}?`)) {
+            try {
+                await db.collection("users").doc(email).delete();
+                alert('Usuário excluído!');
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao excluir.");
+            }
         }
     };
 
-    window.editUser = (email) => {
+    window.editUser = async (email) => {
         const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         const user = allUsers.find(u => u.email === email);
         if (user) {
             const newName = prompt('Novo nome:', user.username);
             const newPoints = prompt('Novos pontos:', user.points);
             
-            if (newName !== null) user.username = newName;
+            let updates = {};
+            if (newName !== null) updates.username = newName;
             if (newPoints !== null) {
                 const p = parseInt(newPoints) || 0;
-                user.points = p;
+                updates.points = p;
                 
-                // If editing self, update current session variables
+                // If editing self, update current session variables immediately
                 if (email === storedUser.email) {
                     storedUser.points = p;
                     userPoints = p;
                     localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
                     updatePointsDisplay();
-                    updateUIWithUser(); // Refresh names/avatars if changed
+                    updateUIWithUser();
                 }
             }
             
@@ -184,11 +216,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
                 updateUIWithUser();
             }
-            
-            localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
-            renderAdminUsers();
-            updateRanking();
-            addNotification(`Usuário ${email} editado.`);
+
+            if (Object.keys(updates).length > 0) {
+                try {
+                    await db.collection("users").doc(email).update(updates);
+                    addNotification(`Usuário ${email} editado.`);
+                } catch (e) {
+                    console.error("Erro ao editar", e);
+                    alert("Erro ao editar usuário.");
+                }
+            }
         }
     };
 
@@ -803,17 +840,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function saveAndSync() {
+    async function saveAndSync() {
+        // Save to current session
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
-        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
-        const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
         
-        if (userIndex !== -1) {
-            allUsers[userIndex] = { ...storedUser };
-        } else {
-            allUsers.push({ ...storedUser });
+        // Sync to Firestore
+        if (storedUser.email) {
+            try {
+                await db.collection("users").doc(storedUser.email).set(storedUser, { merge: true });
+            } catch (e) {
+                console.error("Erro ao sincronizar com Firestore:", e);
+            }
         }
-        localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
     }
 
     // Embaixador Digital Logic (Monthly)
@@ -954,10 +992,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(viewer);
     };
 
+    saveAndSync();
     updateCheckinUI();
     updateLunchUI();
     updateEmbaixadorUI();
     updateJogosUI();
     updatePointsDisplay();
+    updateRanking();
     updateUIWithUser();
 });

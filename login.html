@@ -119,6 +119,9 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const loginContainer = document.getElementById('login-form-container');
@@ -140,106 +143,130 @@
                 loginContainer.classList.add('content-fade');
             });
 
-            // Helper to get all users safely
-            const getAllUsers = () => {
-                try {
-                    const data = localStorage.getItem('moura_leite_all_users');
-                    return data ? JSON.parse(data) : [];
-                } catch (e) {
-                    console.error('Error parsing users', e);
-                    return [];
-                }
-            };
-
-            // Helper to find or create user
-            const getOrCreateUser = (email, username, defaultPoints) => {
-                const allUsers = getAllUsers();
-                let user = allUsers.find(u => u.email === email);
-                if (!user) {
-                    user = {
+            // Helper to find or create user in Firestore
+            const getOrCreateUser = async (email, username, defaultPoints) => {
+                const userRef = db.collection("users").doc(email);
+                const userSnap = await userRef.get();
+                
+                if (userSnap.exists) {
+                    return userSnap.data();
+                } else {
+                    const newUser = {
                         username: username,
                         email: email,
                         points: defaultPoints,
                         dept: 'Tecnologia',
-                        rank: defaultPoints > 0 ? 'Consultor Ouro' : 'Iniciante'
+                        rank: defaultPoints > 0 ? 'Consultor Ouro' : 'Iniciante',
+                        password: email === 'admin@mouraleite.com.br' ? 'admin' : (email === 'alex.landuci@mouraleite.com.br' ? 'alex' : '123456')
                     };
-                    allUsers.push(user);
-                    localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+                    await userRef.set(newUser);
+                    return newUser;
                 }
-                return user;
             };
 
-            // Auth Logic
-            document.getElementById('login-form').addEventListener('submit', (e) => {
+            // Auth Logic (Firebase)
+            document.getElementById('login-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = document.getElementById('login-email').value;
                 const pass = document.getElementById('login-pass').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Autenticando...';
 
-                const allUsers = getAllUsers();
-                const user = allUsers.find(u => u.email === email);
-
-                // 1. Check for Admin Default (only if not changed in DB)
-                if (email === 'admin@mouraleite.com.br') {
-                    const adminInDb = user || getOrCreateUser(email, 'ADMIN', 1500);
-                    if (adminInDb.password === pass || (!adminInDb.password && pass === 'admin')) {
-                        localStorage.setItem('moura_leite_user', JSON.stringify(adminInDb));
-                        window.location.href = 'index.html';
-                        return;
+                try {
+                    // Check for Admin Default
+                    if (email === 'admin@mouraleite.com.br') {
+                        const adminInDb = await getOrCreateUser(email, 'ADMIN', 1500);
+                        if (adminInDb.password === pass || (!adminInDb.password && pass === 'admin')) {
+                            localStorage.setItem('moura_leite_user', JSON.stringify(adminInDb));
+                            window.location.href = 'index.html';
+                            return;
+                        }
                     }
-                }
 
-                // 2. Check for Alex Default (only if not changed in DB)
-                if (email === 'alex.landuci@mouraleite.com.br') {
-                    const alexInDb = user || getOrCreateUser(email, 'Alexsanderson Landuci', 0);
-                    if (alexInDb.password === pass || (!alexInDb.password && pass === 'alex')) {
-                        // Force data sync for Alex as requested before
-                        alexInDb.username = 'Alexsanderson Landuci';
-                        alexInDb.dept = 'RH';
-                        alexInDb.diretoria = 'Financeira';
-                        localStorage.setItem('moura_leite_user', JSON.stringify(alexInDb));
-                        window.location.href = 'index.html';
-                        return;
+                    // Check for Alex Default
+                    if (email === 'alex.landuci@mouraleite.com.br') {
+                        const alexInDb = await getOrCreateUser(email, 'Alexsanderson Landuci', 0);
+                        if (alexInDb.password === pass || (!alexInDb.password && pass === 'alex')) {
+                            alexInDb.username = 'Alexsanderson Landuci';
+                            alexInDb.dept = 'RH';
+                            alexInDb.diretoria = 'Financeira';
+                            await db.collection("users").doc(email).set(alexInDb, { merge: true });
+                            localStorage.setItem('moura_leite_user', JSON.stringify(alexInDb));
+                            window.location.href = 'index.html';
+                            return;
+                        }
                     }
-                }
 
-                // 3. Normal login check for all other users (or updated Admin/Alex)
-                if (user) {
-                    if (user.password === pass || (!user.password && pass === '123456')) { 
-                        localStorage.setItem('moura_leite_user', JSON.stringify(user));
-                        window.location.href = 'index.html';
-                        return;
+                    // Normal login check
+                    const userRef = db.collection("users").doc(email);
+                    const userSnap = await userRef.get();
+
+                    if (userSnap.exists) {
+                        const user = userSnap.data();
+                        if (user.password === pass || (!user.password && pass === '123456')) { 
+                            localStorage.setItem('moura_leite_user', JSON.stringify(user));
+                            window.location.href = 'index.html';
+                            return;
+                        }
                     }
+                    
+                    alert('E-mail ou senha incorretos.');
+                } catch (error) {
+                    console.error("Erro no login:", error);
+                    alert("Erro ao conectar ao servidor. Verifique sua internet.");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Entrar';
                 }
-                alert('E-mail ou senha incorretos.');
             });
 
-            document.getElementById('signup-form').addEventListener('submit', (e) => {
+            document.getElementById('signup-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const username = document.getElementById('reg-user').value;
                 const email = document.getElementById('reg-email').value;
                 const dept = document.getElementById('reg-dept').value;
                 const diretoria = document.getElementById('reg-dir').value;
                 const password = document.getElementById('reg-pass').value;
+                const submitBtn = e.target.querySelector('button[type="submit"]');
 
-                const newUser = {
-                    username,
-                    email,
-                    dept,
-                    diretoria,
-                    password,
-                    points: 0,
-                    rank: 'Iniciante'
-                };
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Criando conta...';
 
-                const allUsers = getAllUsers();
-                if (!allUsers.find(u => u.email === email)) {
-                    allUsers.push(newUser);
-                    localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+                try {
+                    const userRef = db.collection("users").doc(email);
+                    const userSnap = await userRef.get();
+
+                    if (userSnap.exists) {
+                        alert('Este e-mail já está cadastrado. Faça login.');
+                        return;
+                    }
+
+                    const newUser = {
+                        username,
+                        email,
+                        dept,
+                        diretoria,
+                        password,
+                        points: 0,
+                        rank: 'Iniciante',
+                        history: [],
+                        notifications: []
+                    };
+
+                    await userRef.set(newUser);
+                    localStorage.setItem('moura_leite_user', JSON.stringify(newUser));
+                    
+                    alert('Conta criada com sucesso!');
+                    window.location.href = 'index.html';
+                } catch (error) {
+                    console.error("Erro no cadastro:", error);
+                    alert("Erro ao criar conta no servidor.");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Cadastrar';
                 }
-
-                localStorage.setItem('moura_leite_user', JSON.stringify(newUser));
-                alert('Conta criada com sucesso!');
-                window.location.href = 'index.html';
             });
         });
     </script>
