@@ -81,11 +81,11 @@
                 <div class="user-stats-top">
                     <div class="stat-pill">
                         <i class="fa-solid fa-coins"></i>
-                        <span id="user-points">2.450</span>
+                        <span id="user-points">0</span>
                     </div>
                     <div class="stat-pill">
                         <i class="fa-solid fa-fire"></i>
-                        <span id="user-streak">12 Dias</span>
+                        <span id="user-streak">0 Dias</span>
                     </div>
                     <div class="notification-wrapper">
                         <button class="notification-btn" id="notification-btn">
@@ -140,7 +140,7 @@
                             <div class="progress-circle-container">
                                 <svg class="progress-ring" width="120" height="120">
                                     <circle class="progress-ring__circle-bg" stroke="#eee" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
-                                    <circle class="progress-ring__circle" id="main-progress" stroke="#006837" stroke-width="8" stroke-dasharray="326.7" stroke-dashoffset="81.6" fill="transparent" r="52" cx="60" cy="60"/>
+                                    <circle class="progress-ring__circle" id="main-progress" stroke="#006837" stroke-width="8" stroke-dasharray="326.7" stroke-dashoffset="326.7" fill="transparent" r="52" cx="60" cy="60"/>
                                 </svg>
                                 <div class="progress-label" id="meta-percent">0%</div>
                             </div>
@@ -155,23 +155,37 @@
                                 <a href="#" onclick="showPage('missoes')">Ver todas</a>
                             </div>
                             <div class="mission-list">
+                                <div class="mission-item daily-checkin">
+                                    <div class="mission-icon checkin"><i class="fa-solid fa-calendar-check"></i></div>
+                                    <div class="mission-details">
+                                        <h4>Check-in Diário</h4>
+                                        <p id="checkin-status">Garanta seu ponto de hoje!</p>
+                                    </div>
+                                    <button class="btn-checkin" id="checkin-btn">+1 pts</button>
+                                </div>
+                                <div class="mission-item weekly-lunch">
+                                    <div class="mission-icon lunch"><i class="fa-solid fa-people-arrows"></i></div>
+                                    <div class="mission-details">
+                                        <h4>Integração entre Times</h4>
+                                        <p id="lunch-status">Você + 2 pessoas de depto. diferentes.</p>
+                                    </div>
+                                    <button class="btn-checkin" id="lunch-btn">+5 pts</button>
+                                </div>
                                 <div class="mission-item">
                                     <div class="mission-icon social"><i class="fa-brands fa-linkedin"></i></div>
                                     <div class="mission-details">
-                                        <h4>Moura Leite no LinkedIn</h4>
-                                        <p>Publique uma notícia da empresa</p>
-                                        <div class="mini-progress-bar"><div class="fill" style="width: 0%;"></div></div>
+                                        <h4>Embaixador Digital</h4>
+                                        <p>Publique uma notícia</p>
                                     </div>
-                                    <div class="mission-reward">+150 XP</div>
+                                    <button class="btn-checkin" id="embaixador-btn">+15 pts</button>
                                 </div>
                                 <div class="mission-item">
-                                    <div class="mission-icon team"><i class="fa-solid fa-person-running"></i></div>
+                                    <div class="mission-icon team"><i class="fa-solid fa-people-group"></i></div>
                                     <div class="mission-details">
-                                        <h4>Corrida em Equipe</h4>
-                                        <p>Participe do treino de sábado</p>
-                                        <div class="mini-progress-bar"><div class="fill" style="width: 0%;"></div></div>
+                                        <h4>Tarde dos Jogos</h4>
+                                        <p>Integração no auditório</p>
                                     </div>
-                                    <div class="mission-reward">+300 XP</div>
+                                    <button class="btn-checkin" id="jogos-btn">+20 pts</button>
                                 </div>
                             </div>
                         </div>
@@ -183,14 +197,33 @@
                                 <i class="fa-solid fa-crown"></i>
                             </div>
                             <div class="ranking-list">
-                                <div class="rank-item me first">
-                                    <span class="pos">1</span>
-                                    <img src="https://ui-avatars.com/api/?name=Carlos+S&background=006837&color=fff" alt="">
-                                    <span class="name">Você</span>
-                                    <span class="pts">0 pts</span>
-                                </div>
+                                <p style="padding:1rem; color:#999; text-align:center;">Carregando ranking...</p>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Ranking Page -->
+                <section id="ranking-page" class="page-section hidden">
+                    <div class="section-title">
+                        <h2>Ranking Geral</h2>
+                        <p>Veja quem são os colaboradores mais engajados da Moura Leite.</p>
+                    </div>
+                    <div class="glass-card">
+                        <table class="history-table detailed-ranking">
+                            <thead>
+                                <tr>
+                                    <th>Posição</th>
+                                    <th>Colaborador</th>
+                                    <th>Departamento</th>
+                                    <th>Diretoria</th>
+                                    <th>Pontos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-ranking-body">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
@@ -202,33 +235,43 @@
                     </div>
                     <div class="quests-grid">
                         <div class="quest-card">
-                            <div class="quest-badge social">Social</div>
+                            <div class="quest-badge daily">Diário</div>
+                            <i class="fa-solid fa-calendar-check quest-main-icon" style="color: #1976d2;"></i>
+                            <h3>Check-in Diário</h3>
+                            <p>Garanta seu ponto diário apenas acessando o portal.</p>
+                            <div class="quest-footer">
+                                <span class="pts-gain">+1 pts</span>
+                                <button class="btn-checkin" id="checkin-btn-full">Check-in</button>
+                            </div>
+                        </div>
+                        <div class="quest-card">
+                            <div class="quest-badge weekly">Semanal</div>
+                            <i class="fa-solid fa-people-arrows quest-main-icon" style="color: #f57c00;"></i>
+                            <h3>Integração entre Times</h3>
+                            <p>Almoço com você + 2 pessoas de departamentos diferentes.</p>
+                            <div class="quest-footer">
+                                <span class="pts-gain">+5 pts</span>
+                                <button class="btn-checkin" id="lunch-btn-full">Validar Foto</button>
+                            </div>
+                        </div>
+                        <div class="quest-card">
+                            <div class="quest-badge monthly">Mensal</div>
                             <i class="fa-brands fa-linkedin quest-main-icon" style="color: #0077b5;"></i>
                             <h3>Embaixador Digital</h3>
                             <p>Compartilhe o novo lançamento da Moura Leite no seu LinkedIn pessoal.</p>
                             <div class="quest-footer">
-                                <span class="pts-gain">+150 pts</span>
-                                <button class="btn-outline">Enviar Link</button>
+                                <span class="pts-gain">+15 pts</span>
+                                <button class="btn-checkin" id="embaixador-btn-full">Enviar Link</button>
                             </div>
                         </div>
                         <div class="quest-card">
-                            <div class="quest-badge team">Equipe</div>
+                            <div class="quest-badge weekly">Semanal</div>
                             <i class="fa-solid fa-people-group quest-main-icon" style="color: #F1863B;"></i>
                             <h3>Tarde dos Jogos</h3>
                             <p>Participe da dinâmica de integração no auditório nesta sexta-feira.</p>
                             <div class="quest-footer">
-                                <span class="pts-gain">+200 pts</span>
-                                <button class="btn-outline">Confirmar</button>
-                            </div>
-                        </div>
-                        <div class="quest-card">
-                            <div class="quest-badge health">Saúde</div>
-                            <i class="fa-solid fa-person-running quest-main-icon" style="color: #006837;"></i>
-                            <h3>Corrida Moura Leite</h3>
-                            <p>Junte-se aos colegas na corrida de 5km no Parque Cidade.</p>
-                            <div class="quest-footer">
-                                <span class="pts-gain">+300 pts</span>
-                                <button class="btn-outline">Participar</button>
+                                <span class="pts-gain">+20 pts</span>
+                                <button class="btn-checkin" id="jogos-btn-full">Confirmar</button>
                             </div>
                         </div>
                     </div>
@@ -246,8 +289,8 @@
                             <h3>Caneca Personalizada</h3>
                             <p>Cerâmica premium com logo.</p>
                             <div class="item-footer">
-                                <span class="price">800 pts</span>
-                                <button class="btn-buy" onclick="buyItem('Caneca', 800)">Trocar</button>
+                                <span class="price">450 pts</span>
+                                <button class="btn-buy" onclick="buyItem('Caneca', 450)">Trocar</button>
                             </div>
                         </div>
                         <div class="store-card">
@@ -255,8 +298,8 @@
                             <h3>Caneta Executiva</h3>
                             <p>Metal com escrita macia.</p>
                             <div class="item-footer">
-                                <span class="price">450 pts</span>
-                                <button class="btn-buy" onclick="buyItem('Caneta', 450)">Trocar</button>
+                                <span class="price">150 pts</span>
+                                <button class="btn-buy" onclick="buyItem('Caneta', 150)">Trocar</button>
                             </div>
                         </div>
                         <div class="store-card">
@@ -264,8 +307,8 @@
                             <h3>Caderno de Anotações</h3>
                             <p>Capa dura em couro.</p>
                             <div class="item-footer">
-                                <span class="price">1.200 pts</span>
-                                <button class="btn-buy" onclick="buyItem('Caderno', 1200)">Trocar</button>
+                                <span class="price">300 pts</span>
+                                <button class="btn-buy" onclick="buyItem('Caderno', 300)">Trocar</button>
                             </div>
                         </div>
                         <div class="store-card">
@@ -273,8 +316,8 @@
                             <h3>Garrafa Térmica</h3>
                             <p>Aço inox 500ml.</p>
                             <div class="item-footer">
-                                <span class="price">1.500 pts</span>
-                                <button class="btn-buy" onclick="buyItem('Garrafa', 1500)">Trocar</button>
+                                <span class="price">650 pts</span>
+                                <button class="btn-buy" onclick="buyItem('Garrafa', 650)">Trocar</button>
                             </div>
                         </div>
                     </div>
@@ -350,6 +393,8 @@
             </div>
         </main>
     </div>
+    <input type="file" id="lunch-photo-input" accept="image/*" class="hidden">
+    <input type="file" id="games-photo-input" accept="image/*" class="hidden">
     <script src="script.js"></script>
     <!-- Ranks Info Modal -->
     <div id="ranks-modal" class="modal hidden">

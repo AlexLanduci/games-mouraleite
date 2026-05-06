@@ -90,7 +90,7 @@
                                     <option value="" disabled selected>Selecione</option>
                                     <option value="comercial">Comercial</option>
                                     <option value="operacional">Operacional</option>
-                                    <option value="administrativa">Administrativa</option>
+                                    <option value="Financeira">Financeira</option>
                                 </select>
                             </div>
                         </div>
@@ -177,6 +177,14 @@
                 // Check for Alex
                 if (email === 'alex.landuci@mouraleite.com.br' && pass === 'alex') {
                     const alexUser = getOrCreateUser(email, 'Alexsanderson Landuci', 0);
+                    // Force name correction and reset if needed
+                    alexUser.username = 'Alexsanderson Landuci';
+                    alexUser.dept = 'RH';
+                    alexUser.diretoria = 'Financeira';
+                    if (alexUser.points === 2450) {
+                        alexUser.points = 0;
+                    }
+                    localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
                     localStorage.setItem('moura_leite_user', JSON.stringify(alexUser));
                     window.location.href = 'index.html';
                     return;
@@ -197,12 +205,14 @@
                 const username = document.getElementById('reg-user').value;
                 const email = document.getElementById('reg-email').value;
                 const dept = document.getElementById('reg-dept').value;
+                const diretoria = document.getElementById('reg-dir').value;
 
                 // Create user object
                 const newUser = {
                     username: username,
                     email: email,
                     dept: dept,
+                    diretoria: diretoria,
                     points: 0,
                     rank: 'Iniciante'
                 };

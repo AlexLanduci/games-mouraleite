@@ -1,18 +1,80 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Global Master Reset (One-time for all users)
+    if (!localStorage.getItem('moura_leite_master_reset_v1')) {
+        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+        allUsers.forEach(user => {
+            if (user.email !== 'admin@mouraleite.com.br') {
+                user.points = 0;
+                user.history = [];
+                user.lastCheckIn = null;
+                user.lastLunchWeek = null;
+                user.streak = 1;
+                user.visitCount = 1;
+            }
+        });
+        localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+        localStorage.setItem('moura_leite_global_history', JSON.stringify([]));
+        
+        // Update current session if not admin
+        let sessionUser = JSON.parse(localStorage.getItem('moura_leite_user'));
+        if (sessionUser && sessionUser.email !== 'admin@mouraleite.com.br') {
+            sessionUser.points = 0;
+            sessionUser.history = [];
+            sessionUser.lastCheckIn = null;
+            sessionUser.lastLunchWeek = null;
+            localStorage.setItem('moura_leite_user', JSON.stringify(sessionUser));
+        }
+        
+        localStorage.setItem('moura_leite_master_reset_v1', 'true');
+        window.location.reload(); // Reload to apply changes
+    }
+
     // Load User Data from LocalStorage
     const storedUser = JSON.parse(localStorage.getItem('moura_leite_user')) || {
-        username: 'Carlos Silva',
-        points: 2450,
-        rank: 'Consultor Ouro',
-        dept: 'Vendas'
+        username: 'Novo Colaborador',
+        points: 0,
+        rank: 'Iniciante',
+        dept: 'Moura Leite'
     };
+
+    // Visit Tracking & Date Helpers
+    const now = new Date();
+    const todayStr = now.toDateString();
+    
+    const getWeekNumber = (date) => {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1)/7) + '-' + d.getUTCFullYear();
+    };
+    const currentWeek = getWeekNumber(now);
+
+    // Migration/Reset Fix: Force Alex to 0 if he has legacy points (One-time)
+    if (storedUser.email === 'alex.landuci@mouraleite.com.br' && !storedUser.legacyReset) {
+        storedUser.username = 'Alexsanderson Landuci'; // Force correct name
+        storedUser.dept = 'RH';
+        storedUser.diretoria = 'Financeira';
+        if (storedUser.points === 2450 || storedUser.points === 800) {
+            storedUser.points = 0;
+            // Sync with global list
+            const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+            const idx = allUsers.findIndex(u => u.email === storedUser.email);
+            if (idx !== -1) {
+                allUsers[idx].username = 'Alexsanderson Landuci';
+                allUsers[idx].points = 0;
+                localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+            }
+        }
+        storedUser.legacyReset = true;
+        localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+    }
 
     let userPoints = storedUser.points;
     const pointsElement = document.getElementById('user-points');
     
     // Visit Tracking (Cumulative Days)
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toDateString();
+    const today = todayStr;
     const lastVisit = storedUser.lastVisit;
 
     if (lastVisit !== today) {
@@ -84,21 +146,38 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rankStatusText) rankStatusText.textContent = 'Nível Máximo Atingido';
         }
 
-        // Update Goals Widget
+        // Update Goals Widget (Dynamic Integration)
         const metaText = document.getElementById('meta-text');
         const metaPercent = document.getElementById('meta-percent');
         const metaStatus = document.getElementById('meta-status');
         const circle = document.getElementById('main-progress');
 
-        // Logic for goals (Admin gets 3/4, others 0/4)
         const totalGoals = 4;
-        const completedGoals = storedUser.email === 'admin@mouraleite.com.br' ? 3 : 0;
+        let completedGoals = 0;
+
+        // Check Goal 1: Daily Check-in done today
+        if (storedUser.lastCheckIn === todayStr) completedGoals++;
+
+        // Check Goal 2: Integration Lunch done this week
+        if (storedUser.lastLunchWeek === currentWeek) completedGoals++;
+
+        // Check Goal 3: Any Social/LinkedIn mission in history
+        const hasSocial = storedUser.history && storedUser.history.some(tx => tx.item.includes('LinkedIn') || tx.item.includes('Embaixador'));
+        if (hasSocial) completedGoals++;
+
+        // Check Goal 4: Any Team/Health mission in history
+        const hasTeam = storedUser.history && storedUser.history.some(tx => tx.item.includes('Jogos') || tx.item.includes('Corrida'));
+        if (hasTeam) completedGoals++;
+
         const percentage = (completedGoals / totalGoals) * 100;
 
         if (metaText) metaText.textContent = `Metas: ${completedGoals} de ${totalGoals} completadas`;
-        if (metaPercent) metaPercent.textContent = `${percentage}%`;
+        if (metaPercent) metaPercent.textContent = `${Math.floor(percentage)}%`;
         if (metaStatus) {
-            metaStatus.textContent = percentage >= 75 ? 'Status: Excelente' : 'Status: Iniciando';
+            if (percentage === 0) metaStatus.textContent = 'Status: Iniciando';
+            else if (percentage < 50) metaStatus.textContent = 'Status: Em progresso';
+            else if (percentage < 100) metaStatus.textContent = 'Status: Muito bom';
+            else metaStatus.textContent = 'Status: Excelente';
         }
 
         // Animate Circle
@@ -334,7 +413,10 @@ document.addEventListener('DOMContentLoaded', () => {
         historyBody.innerHTML = historyData.map(tx => `
             <tr>
                 ${isAdmin ? `<td><strong>${tx.user}</strong></td>` : ''}
-                <td>${tx.item}</td>
+                <td>
+                    ${tx.item} 
+                    ${tx.photo ? `<button class="view-photo-btn" onclick="viewPhoto('${tx.photo}')" title="Ver Comprovante">📸</button>` : ''}
+                </td>
                 <td>${tx.date}</td>
                 <td>${tx.time}</td>
                 <td><span class="status-badge">${tx.status}</span></td>
@@ -342,7 +424,38 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     };
 
-    // Update the showPage function to render history/achievements when needed
+    // Full Detailed Ranking Rendering
+    const renderFullRanking = () => {
+        const fullRankingBody = document.getElementById('full-ranking-body');
+        if (!fullRankingBody) return;
+
+        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+        const sortedUsers = allUsers
+            .filter(u => u.email !== 'admin@mouraleite.com.br')
+            .sort((a, b) => b.points - a.points);
+
+        fullRankingBody.innerHTML = sortedUsers.map((user, index) => {
+            const deptDisplay = user.dept ? (user.dept.length <= 3 ? user.dept.toUpperCase() : user.dept.charAt(0).toUpperCase() + user.dept.slice(1)) : 'Geral';
+            const dirDisplay = user.diretoria ? (user.diretoria.charAt(0).toUpperCase() + user.diretoria.slice(1)) : 'Moura Leite';
+            
+            return `
+                <tr>
+                    <td><strong>${index + 1}º</strong></td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=006837&color=fff" style="width:30px; border-radius:50%;">
+                            <span>${user.username}</span>
+                        </div>
+                    </td>
+                    <td>${deptDisplay}</td>
+                    <td>${dirDisplay}</td>
+                    <td><strong>${user.points.toLocaleString()} pts</strong></td>
+                </tr>
+            `;
+        }).join('');
+    };
+
+    // Update the showPage function to render history/achievements/ranking when needed
     const originalShowPage = window.showPage;
     window.showPage = function(pageId) {
         originalShowPage(pageId);
@@ -351,6 +464,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (pageId === 'conquistas') {
             updateAchievements();
+        }
+        if (pageId === 'ranking') {
+            renderFullRanking();
         }
     };
 
@@ -428,8 +544,234 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderNotifications();
 
-    // Initial point animation
-    setTimeout(() => {
-        updatePointsDisplay();
-    }, 1500);
+    const checkinBtns = document.querySelectorAll('#checkin-btn, #checkin-btn-full');
+    const checkinStatus = document.getElementById('checkin-status');
+
+    const updateCheckinUI = () => {
+        if (storedUser.lastCheckIn === todayStr) {
+            checkinBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+            if (checkinStatus) checkinStatus.textContent = 'Você já garantiu seu ponto de hoje!';
+        }
+    };
+
+    checkinBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastCheckIn !== todayStr) {
+                userPoints += 1;
+                storedUser.points = userPoints;
+                storedUser.lastCheckIn = todayStr;
+                saveAndSync();
+                updatePointsDisplay();
+                updateRanking();
+                updateUIWithUser();
+                updateCheckinUI();
+                addNotification('Check-in diário realizado! +1 pts.');
+                alert('Parabéns! Você ganhou 1 ponto pelo seu check-in diário.');
+            }
+        });
+    });
+
+    // Weekly Lunch Logic with Photo Audit (Multi-location)
+    const lunchBtns = document.querySelectorAll('#lunch-btn, #lunch-btn-full');
+    const lunchStatus = document.getElementById('lunch-status');
+    const lunchPhotoInput = document.getElementById('lunch-photo-input');
+
+    const updateLunchUI = () => {
+        if (storedUser.lastLunchWeek === currentWeek) {
+            lunchBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+            if (lunchStatus) lunchStatus.textContent = 'Integração semanal concluída! Parabéns.';
+        }
+    };
+
+    lunchBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastLunchWeek !== currentWeek) {
+                alert('Para validar essa missão de 5 pontos, você precisa anexar uma foto do almoço com os colegas de outros departamentos.');
+                lunchPhotoInput.click();
+            }
+        });
+    });
+
+    if (lunchPhotoInput) {
+        lunchPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const photoData = event.target.result;
+                userPoints += 5;
+                storedUser.points = userPoints;
+                storedUser.lastLunchWeek = currentWeek;
+                
+                const now = new Date();
+                const transaction = {
+                    user: storedUser.username,
+                    item: 'Integração entre Times',
+                    date: now.toLocaleDateString('pt-BR'),
+                    time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    status: 'Concluído',
+                    photo: photoData,
+                    type: 'Ganho'
+                };
+
+                if (!storedUser.history) storedUser.history = [];
+                storedUser.history.unshift(transaction);
+                
+                // Global Sync
+                const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+                globalHistory.unshift(transaction);
+                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
+                saveAndSync();
+                updatePointsDisplay();
+                updateRanking();
+                updateUIWithUser();
+                updateLunchUI();
+                addNotification('Foto enviada e pontos creditados! +5 pts.');
+                alert('Missão concluída com sucesso! Foto salva para auditoria.');
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function saveAndSync() {
+        localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+        const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
+        if (userIndex !== -1) {
+            allUsers[userIndex].points = storedUser.points;
+            localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+        }
+    }
+
+    // Embaixador Digital Logic (Monthly)
+    const embaixadorBtns = document.querySelectorAll('#embaixador-btn, #embaixador-btn-full');
+    const currentMonth = (now.getMonth() + 1) + '-' + now.getFullYear();
+
+    const updateEmbaixadorUI = () => {
+        if (storedUser.lastLinkedInMonth === currentMonth) {
+            embaixadorBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+        }
+    };
+
+    embaixadorBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastLinkedInMonth !== currentMonth) {
+                const link = prompt('Insira o link da sua publicação no LinkedIn para validação:');
+                if (link) {
+                    userPoints += 15;
+                    storedUser.points = userPoints;
+                    storedUser.lastLinkedInMonth = currentMonth;
+                    
+                    const transaction = {
+                        user: storedUser.username,
+                        item: 'Embaixador Digital',
+                        date: now.toLocaleDateString('pt-BR'),
+                        time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        status: 'Concluído',
+                        type: 'Ganho'
+                    };
+                    if (!storedUser.history) storedUser.history = [];
+                    storedUser.history.unshift(transaction);
+                    
+                    saveAndSync();
+                    updatePointsDisplay();
+                    updateRanking();
+                    updateUIWithUser();
+                    updateEmbaixadorUI();
+                    addNotification('Missão Embaixador concluída! +15 pts.');
+                    alert('Sucesso! Link enviado para auditoria e pontos creditados.');
+                }
+            }
+        });
+    });
+
+    // Tarde dos Jogos Logic (Weekly)
+    const jogosBtns = document.querySelectorAll('#jogos-btn, #jogos-btn-full');
+    const gamesPhotoInput = document.getElementById('games-photo-input');
+    
+    const updateJogosUI = () => {
+        if (storedUser.lastGamesWeek === currentWeek) {
+            jogosBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+        }
+    };
+
+    jogosBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastGamesWeek !== currentWeek) {
+                alert('Para ganhar estes 20 pontos, anexe uma foto da sua participação na Tarde de Jogos.');
+                gamesPhotoInput.click();
+            }
+        });
+    });
+
+    if (gamesPhotoInput) {
+        gamesPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const photoData = event.target.result;
+                userPoints += 20;
+                storedUser.points = userPoints;
+                storedUser.lastGamesWeek = currentWeek;
+                
+                const now = new Date();
+                const transaction = {
+                    user: storedUser.username,
+                    item: 'Tarde dos Jogos',
+                    date: now.toLocaleDateString('pt-BR'),
+                    time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    status: 'Concluído',
+                    photo: photoData,
+                    type: 'Ganho'
+                };
+
+                if (!storedUser.history) storedUser.history = [];
+                storedUser.history.unshift(transaction);
+                
+                // Global Sync
+                const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+                globalHistory.unshift(transaction);
+                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
+                saveAndSync();
+                updatePointsDisplay();
+                updateRanking();
+                updateUIWithUser();
+                updateJogosUI();
+                addNotification('Foto da Tarde de Jogos enviada! +20 pts.');
+                alert('Sucesso! Foto salva para auditoria do RH.');
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    window.viewPhoto = (photoData) => {
+        const viewer = document.createElement('div');
+        viewer.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; display:flex; align-items:center; justify-content:center; cursor:pointer;';
+        viewer.innerHTML = `<img src="${photoData}" style="max-width:90%; max-height:90%; border-radius:10px; border: 5px solid white;">`;
+        viewer.onclick = () => viewer.remove();
+        document.body.appendChild(viewer);
+    };
+
+    updateCheckinUI();
+    updateLunchUI();
+    updateEmbaixadorUI();
+    updateJogosUI();
+    updatePointsDisplay();
 });
