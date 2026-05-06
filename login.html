@@ -168,7 +168,8 @@
 
                 // Check for Admin
                 if (email === 'admin@mouraleite.com.br' && pass === 'admin') {
-                    const adminUser = getOrCreateUser(email, 'Carlos Silva', 2450);
+                    const adminUser = getOrCreateUser(email, 'ADMIN', 1500);
+                    adminUser.username = 'ADMIN'; // Force correction
                     localStorage.setItem('moura_leite_user', JSON.stringify(adminUser));
                     window.location.href = 'index.html';
                     return;

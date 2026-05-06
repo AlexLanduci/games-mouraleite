@@ -70,6 +70,11 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
     }
 
+    // Force Admin name
+    if (storedUser.email === 'admin@mouraleite.com.br') {
+        storedUser.username = 'ADMIN';
+    }
+
     let userPoints = storedUser.points;
     const pointsElement = document.getElementById('user-points');
     
@@ -646,7 +651,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
         if (userIndex !== -1) {
-            allUsers[userIndex].points = storedUser.points;
+            // Update all fields to ensure persistence after logout
+            allUsers[userIndex] = { ...storedUser };
             localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
         }
     }
