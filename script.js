@@ -208,13 +208,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Rank Definitions
     const ranks = [
-        { name: 'Iniciante', min: 0, next: 500, icon: 'fa-seedling', class: 'rank-iniciante' },
-        { name: 'Bronze', min: 501, next: 1500, icon: 'fa-medal', class: 'rank-bronze' },
-        { name: 'Prata', min: 1501, next: 3000, icon: 'fa-award', class: 'rank-prata' },
-        { name: 'Ouro', min: 3001, next: 6000, icon: 'fa-trophy', class: 'rank-ouro' },
-        { name: 'Platina', min: 6001, next: 10000, icon: 'fa-crown', class: 'rank-platina' },
-        { name: 'Diamante', min: 10001, next: Infinity, icon: 'fa-gem', class: 'rank-diamante' }
+        { name: 'Iniciante', min: 0, next: 500, icon: 'fa-seedling', class: 'rank-iniciante', multiplier: 1.0 },
+        { name: 'Bronze', min: 501, next: 1500, icon: 'fa-medal', class: 'rank-bronze', multiplier: 1.1 },
+        { name: 'Prata', min: 1501, next: 3000, icon: 'fa-award', class: 'rank-prata', multiplier: 1.2 },
+        { name: 'Ouro', min: 3001, next: 6000, icon: 'fa-trophy', class: 'rank-ouro', multiplier: 1.5 },
+        { name: 'Platina', min: 6001, next: 10000, icon: 'fa-crown', class: 'rank-platina', multiplier: 2.0 },
+        { name: 'Diamante', min: 10001, next: Infinity, icon: 'fa-gem', class: 'rank-diamante', multiplier: 1.0 }
     ];
+
+    const getCurrentMultiplier = () => {
+        const currentRankObj = ranks.find((r, i) => userPoints <= r.next) || ranks[ranks.length-1];
+        return currentRankObj.multiplier || 1.0;
+    };
 
     // Update UI with User Data
     const updateUIWithUser = () => {
@@ -323,6 +328,26 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 circle.style.strokeDashoffset = offset;
             }, 500);
+        }
+
+        // Update Quest Labels based on multiplier
+        const multiplier = getCurrentMultiplier();
+        const checkinBtn = document.getElementById('checkin-btn');
+        const lunchBtn = document.getElementById('lunch-btn');
+        const embaixadorBtn = document.getElementById('embaixador-btn');
+        const jogosBtn = document.getElementById('jogos-btn');
+        
+        if (checkinBtn && !checkinBtn.disabled) checkinBtn.textContent = `+${Math.floor(1 * multiplier)} pts`;
+        if (lunchBtn && !lunchBtn.disabled) lunchBtn.textContent = `+${Math.floor(5 * multiplier)} pts`;
+        if (embaixadorBtn && !embaixadorBtn.disabled) embaixadorBtn.textContent = `+${Math.floor(15 * multiplier)} pts`;
+        if (jogosBtn && !jogosBtn.disabled) jogosBtn.textContent = `+${Math.floor(20 * multiplier)} pts`;
+
+        const ptsSpans = document.querySelectorAll('.pts-gain');
+        if (ptsSpans.length >= 4) {
+             ptsSpans[0].textContent = `+${Math.floor(1 * multiplier)} pts`;
+             ptsSpans[1].textContent = `+${Math.floor(5 * multiplier)} pts`;
+             ptsSpans[2].textContent = `+${Math.floor(15 * multiplier)} pts`;
+             ptsSpans[3].textContent = `+${Math.floor(20 * multiplier)} pts`;
         }
     };
 
@@ -692,7 +717,9 @@ document.addEventListener('DOMContentLoaded', () => {
     checkinBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             if (storedUser.lastCheckIn !== todayStr) {
-                userPoints += 1;
+                const multiplier = getCurrentMultiplier();
+                const earned = Math.floor(1 * multiplier);
+                userPoints += earned;
                 storedUser.points = userPoints;
                 storedUser.lastCheckIn = todayStr;
                 saveAndSync();
@@ -700,8 +727,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateCheckinUI();
-                addNotification('Check-in diário realizado! +1 pts.');
-                alert('Parabéns! Você ganhou 1 ponto pelo seu check-in diário.');
+                addNotification(`Check-in diário realizado! +${earned} pts.`);
+                alert(`Parabéns! Você ganhou ${earned} ponto(s) pelo seu check-in diário.`);
             }
         });
     });
@@ -738,7 +765,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const photoData = event.target.result;
-                userPoints += 5;
+                const multiplier = getCurrentMultiplier();
+                const earned = Math.floor(5 * multiplier);
+                userPoints += earned;
                 storedUser.points = userPoints;
                 storedUser.lastLunchWeek = currentWeek;
                 storedUser.lunchCount = (storedUser.lunchCount || 0) + 1;
@@ -767,8 +796,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateLunchUI();
-                addNotification('Foto enviada e pontos creditados! +5 pts.');
-                alert('Missão concluída com sucesso! Foto salva para auditoria.');
+                addNotification(`Foto enviada e pontos creditados! +${earned} pts.`);
+                alert(`Missão concluída com sucesso! Você ganhou ${earned} pontos.`);
             };
             reader.readAsDataURL(file);
         });
@@ -813,7 +842,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    userPoints += 15;
+                    const multiplier = getCurrentMultiplier();
+                    const earned = Math.floor(15 * multiplier);
+                    userPoints += earned;
                     storedUser.points = userPoints;
                     storedUser.lastLinkedInMonth = currentMonth;
                     storedUser.linkedInCount = (storedUser.linkedInCount || 0) + 1;
@@ -841,8 +872,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateRanking();
                     updateUIWithUser();
                     updateEmbaixadorUI();
-                    addNotification('Missão Embaixador concluída! +15 pts.');
-                    alert('Sucesso! Link enviado para auditoria e pontos creditados.');
+                    addNotification(`Missão Embaixador concluída! +${earned} pts.`);
+                    alert(`Sucesso! Você ganhou ${earned} pontos.`);
                 }
             }
         });
@@ -878,7 +909,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const photoData = event.target.result;
-                userPoints += 20;
+                const multiplier = getCurrentMultiplier();
+                const earned = Math.floor(20 * multiplier);
+                userPoints += earned;
                 storedUser.points = userPoints;
                 storedUser.lastGamesWeek = currentWeek;
                 
@@ -906,8 +939,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateJogosUI();
-                addNotification('Foto da Tarde de Jogos enviada! +20 pts.');
-                alert('Sucesso! Foto salva para auditoria do RH.');
+                addNotification(`Foto da Tarde de Jogos enviada! +${earned} pts.`);
+                alert(`Sucesso! Você ganhou ${earned} pontos!`);
             };
             reader.readAsDataURL(file);
         });
