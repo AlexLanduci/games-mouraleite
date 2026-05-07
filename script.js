@@ -23,8 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 user.lastLunchWeek = null;
                 user.lastGamesWeek = null;
                 user.lastLinkedInMonth = null;
+                user.lastVivaEngageMonth = null;
                 user.lunchCount = 0;
                 user.linkedInCount = 0;
+                user.vivaEngageCount = 0;
                 user.streak = 1;
                 user.visitCount = 1;
             }
@@ -41,8 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionUser.lastLunchWeek = null;
             sessionUser.lastGamesWeek = null;
             sessionUser.lastLinkedInMonth = null;
+            sessionUser.lastVivaEngageMonth = null;
             sessionUser.lunchCount = 0;
             sessionUser.linkedInCount = 0;
+            sessionUser.vivaEngageCount = 0;
             localStorage.setItem('moura_leite_user', JSON.stringify(sessionUser));
         }
         
@@ -978,6 +982,68 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateUIWithUser();
                     updateEmbaixadorUI();
                     addNotification(`Missão Embaixador concluída! +${earned} pts.`);
+                    alert(`Sucesso! Você ganhou ${earned} pontos.`);
+                }
+            }
+        });
+    });
+
+    // Viva Engage Logic (Monthly)
+    const vivaengageBtns = document.querySelectorAll('#vivaengage-btn, #vivaengage-btn-full');
+
+    const updateVivaEngageUI = () => {
+        if (storedUser.lastVivaEngageMonth === currentMonth) {
+            vivaengageBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+        }
+    };
+
+    vivaengageBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastVivaEngageMonth !== currentMonth) {
+                const link = prompt('Insira o link da sua postagem no Viva Engage para validação:');
+                
+                if (link) {
+                    // Validar se é um link real
+                    const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/;
+                    if (!urlPattern.test(link)) {
+                        alert('Por favor, insira um link válido');
+                        return;
+                    }
+
+                    const multiplier = getCurrentMultiplier();
+                    const earned = Math.floor(12 * multiplier);
+                    userPoints += earned;
+                    storedUser.points = userPoints;
+                    storedUser.lastVivaEngageMonth = currentMonth;
+                    storedUser.vivaEngageCount = (storedUser.vivaEngageCount || 0) + 1;
+                    
+                    const transaction = {
+                        user: storedUser.username,
+                        item: 'Engajamento Viva Engage',
+                        date: now.toLocaleDateString('pt-BR'),
+                        time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        status: 'Concluído',
+                        link: link,
+                        type: 'Ganho'
+                    };
+                    if (!storedUser.history) storedUser.history = [];
+                    storedUser.history.unshift(transaction);
+                    
+                    // Global Sync
+                    const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+                    globalHistory.unshift(transaction);
+                    localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+                    
+                    saveAndSync();
+                    updatePointsDisplay();
+                    updateUIWithUser();
+                    updateRanking();
+                    updateUIWithUser();
+                    updateVivaEngageUI();
+                    addNotification(`Missão Viva Engage concluída! +${earned} pts.`);
                     alert(`Sucesso! Você ganhou ${earned} pontos.`);
                 }
             }

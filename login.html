@@ -48,7 +48,7 @@
                             <label class="remember-me">
                                 <input type="checkbox"> Lembrar de mim
                             </label>
-                            <a href="#" class="forgot-pass">Esqueci a senha</a>
+                            <a href="forgot-password.html" class="forgot-pass">Esqueci a senha</a>
                         </div>
                         <button type="submit" class="btn-auth">Entrar</button>
                     </form>
@@ -63,8 +63,8 @@
                     <form class="auth-form" id="signup-form">
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="reg-user">Usuário</label>
-                                <input type="text" id="reg-user" placeholder="Ex: carlossilva" required>
+                                <label for="reg-user">Nome Completo</label>
+                                <input type="text" id="reg-user" placeholder="Nome Completo" required>
                             </div>
                             <div class="form-group">
                                 <label for="reg-email">E-mail</label>
@@ -77,20 +77,33 @@
                                 <label for="reg-dept">Departamento</label>
                                 <select id="reg-dept" required>
                                     <option value="" disabled selected>Selecione</option>
-                                    <option value="vendas">Vendas</option>
+                                    <option value="obras">Obras</option>
+                                    <option value="pessoas">Pessoas</option>
+                                    <option value="relacionamento">Relacionamento</option>
+                                    <option value="servicos">Serviços</option>
                                     <option value="marketing">Marketing</option>
-                                    <option value="financeiro">Financeiro</option>
-                                    <option value="rh">RH</option>
+                                    <option value="secretaria-vendas">Secretaria de Vendas</option>
+                                    <option value="projetos">Projetos</option>
+                                    <option value="pdv-tatui">PDV Tatuí</option>
+                                    <option value="controladoria">Controladoria</option>
+                                    <option value="tesouraria">Tesouraria</option>
+                                    <option value="suprimentos">Suprimentos</option>
+                                    <option value="comercial">Comercial</option>
+                                    <option value="cobranca">Cobrança</option>
+                                    <option value="pdv-avare">PDV Avaré</option>
+                                    <option value="sdr">SDR</option>
                                     <option value="engenharia">Engenharia</option>
+                                    <option value="novos-negocios">Novos Negócios</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label for="reg-dir">Diretoria</label>
                                 <select id="reg-dir" required>
                                     <option value="" disabled selected>Selecione</option>
-                                    <option value="comercial">Comercial</option>
-                                    <option value="operacional">Operacional</option>
-                                    <option value="Financeira">Financeira</option>
+                                    <option value="diretoria-engenharia">Diretoria de Engenharia</option>
+                                    <option value="diretoria-financeira">Diretoria Financeira</option>
+                                    <option value="diretoria-comercial">Diretoria Comercial</option>
+                                    <option value="diretoria-projetos">Diretoria de Projetos</option>
                                 </select>
                             </div>
                         </div>
@@ -243,11 +256,16 @@
                         return;
                     }
 
+                    const birth = document.getElementById('reg-birth').value;
+                    const admission = document.getElementById('reg-adm').value;
+
                     const newUser = {
                         username,
                         email,
                         dept,
                         diretoria,
+                        birth,
+                        admission,
                         password,
                         points: 0,
                         rank: 'Iniciante',
