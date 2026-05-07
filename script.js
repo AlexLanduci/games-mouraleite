@@ -840,6 +840,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Reunião de Integração Logic (Weekly)
+    const reuniaoBtns = document.querySelectorAll('#reuniao-btn, #reuniao-btn-full');
+    const reuniaoPhotoInput = document.getElementById('reuniao-photo-input');
+
+    const updateReuniaoUI = () => {
+        if (storedUser.lastReuniaoWeek === currentWeek) {
+            reuniaoBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Concluído';
+            });
+        }
+    };
+
+    reuniaoBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (storedUser.lastReuniaoWeek !== currentWeek) {
+                alert('Para validar esta missão de 8 pontos, anexe uma foto da reunião de integração com colegas de outro setor.');
+                if (reuniaoPhotoInput) reuniaoPhotoInput.click();
+            }
+        });
+    });
+
+    if (reuniaoPhotoInput) {
+        reuniaoPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const photoData = event.target.result;
+                const multiplier = getCurrentMultiplier();
+                const earned = Math.floor(8 * multiplier);
+                userPoints += earned;
+                storedUser.points = userPoints;
+                storedUser.lastReuniaoWeek = currentWeek;
+                storedUser.reuniaoCount = (storedUser.reuniaoCount || 0) + 1;
+
+                const now = new Date();
+                const transaction = {
+                    user: storedUser.username,
+                    item: 'Reunião de Integração',
+                    date: now.toLocaleDateString('pt-BR'),
+                    time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    status: 'Concluído',
+                    photo: photoData,
+                    type: 'Ganho'
+                };
+
+                if (!storedUser.history) storedUser.history = [];
+                storedUser.history.unshift(transaction);
+
+                const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+                globalHistory.unshift(transaction);
+                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
+                saveAndSync();
+                updatePointsDisplay();
+                updateRanking();
+                updateUIWithUser();
+                updateReuniaoUI();
+                addNotification(`Foto enviada e pontos creditados! +${earned} pts.`);
+                alert(`Missão concluída com sucesso! Você ganhou ${earned} pontos.`);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     async function saveAndSync() {
         // Save to current session
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));

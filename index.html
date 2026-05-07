@@ -268,6 +268,16 @@
                             </div>
                         </div>
                         <div class="quest-card">
+                            <div class="quest-badge weekly">Semanal</div>
+                            <i class="fa-solid fa-handshake quest-main-icon" style="color: #4caf50;"></i>
+                            <h3>Reunião de Integração</h3>
+                            <p>Participe de um encontro com colegas de outro setor.</p>
+                            <div class="quest-footer">
+                                <span class="pts-gain">+8 pts</span>
+                                <button class="btn-checkin" id="reuniao-btn-full">Validar Foto</button>
+                            </div>
+                        </div>
+                        <div class="quest-card">
                             <div class="quest-badge monthly">Mensal</div>
                             <i class="fa-brands fa-linkedin quest-main-icon" style="color: #0077b5;"></i>
                             <h3>Embaixador Digital</h3>
@@ -300,7 +310,6 @@
                         <div class="store-card">
                             <div class="item-img"><i class="fa-solid fa-mug-hot"></i></div>
                             <h3>Caneca Personalizada</h3>
-                            <p>Cerâmica premium com logo.</p>
                             <div class="item-footer">
                                 <span class="price">450 pts</span>
                                 <button class="btn-buy" onclick="buyItem('Caneca', 450)">Trocar</button>
@@ -309,7 +318,6 @@
                         <div class="store-card">
                             <div class="item-img"><i class="fa-solid fa-pen-fancy"></i></div>
                             <h3>Caneta Executiva</h3>
-                            <p>Metal com escrita macia.</p>
                             <div class="item-footer">
                                 <span class="price">150 pts</span>
                                 <button class="btn-buy" onclick="buyItem('Caneta', 150)">Trocar</button>
@@ -318,7 +326,6 @@
                         <div class="store-card">
                             <div class="item-img"><i class="fa-solid fa-book"></i></div>
                             <h3>Caderno de Anotações</h3>
-                            <p>Capa dura em couro.</p>
                             <div class="item-footer">
                                 <span class="price">300 pts</span>
                                 <button class="btn-buy" onclick="buyItem('Caderno', 300)">Trocar</button>
@@ -327,7 +334,6 @@
                         <div class="store-card">
                             <div class="item-img"><i class="fa-solid fa-bottle-water"></i></div>
                             <h3>Garrafa Térmica</h3>
-                            <p>Aço inox 500ml.</p>
                             <div class="item-footer">
                                 <span class="price">650 pts</span>
                                 <button class="btn-buy" onclick="buyItem('Garrafa', 650)">Trocar</button>
@@ -453,6 +459,7 @@
         </main>
     </div>
     <input type="file" id="lunch-photo-input" accept="image/*" class="hidden">
+    <input type="file" id="reuniao-photo-input" accept="image/*" class="hidden">
     <input type="file" id="games-photo-input" accept="image/*" class="hidden">
     
     <!-- Firebase SDK (Compat) -->
