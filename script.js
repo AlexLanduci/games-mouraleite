@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 user.history = [];
                 user.lastCheckIn = null;
                 user.lastLunchWeek = null;
+                user.lastReuniaoWeek = null;
                 user.lastGamesWeek = null;
                 user.lastLinkedInMonth = null;
                 user.lastVivaEngageMonth = null;
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionUser.history = [];
             sessionUser.lastCheckIn = null;
             sessionUser.lastLunchWeek = null;
+            sessionUser.lastReuniaoWeek = null;
             sessionUser.lastGamesWeek = null;
             sessionUser.lastLinkedInMonth = null;
             sessionUser.lastVivaEngageMonth = null;
@@ -80,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Visit Tracking & Date Helpers
     const now = new Date();
     const todayStr = now.toDateString();
+    const currentMonth = (now.getMonth() + 1) + '-' + now.getFullYear();
     
     const getWeekNumber = (date) => {
         const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -331,22 +334,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const metaStatus = document.getElementById('meta-status');
         const circle = document.getElementById('main-progress');
 
-        const totalGoals = 4;
+        const totalGoals = 6;
         let completedGoals = 0;
 
-        // Check Goal 1: Daily Check-in done today
+        // Check Goal 1: Daily Check-in
         if (storedUser.lastCheckIn === todayStr) completedGoals++;
 
-        // Check Goal 2: Integration Lunch done this week
+        // Check Goal 2: Weekly Lunch/Integração entre Times
         if (storedUser.lastLunchWeek === currentWeek) completedGoals++;
 
-        // Check Goal 3: Any Social/LinkedIn mission in history
-        const hasSocial = storedUser.history && storedUser.history.some(tx => tx.item.includes('LinkedIn') || tx.item.includes('Embaixador'));
-        if (hasSocial) completedGoals++;
+        // Check Goal 3: Weekly Reunião de Integração
+        if (storedUser.lastReuniaoWeek === currentWeek) completedGoals++;
 
-        // Check Goal 4: Any Team/Health mission in history
-        const hasTeam = storedUser.history && storedUser.history.some(tx => tx.item.includes('Jogos') || tx.item.includes('Corrida'));
-        if (hasTeam) completedGoals++;
+        // Check Goal 4: Monthly Embaixador Digital
+        if (storedUser.lastLinkedInMonth === currentMonth) completedGoals++;
+
+        // Check Goal 5: Monthly Viva Engage
+        if (storedUser.lastVivaEngageMonth === currentMonth) completedGoals++;
+
+        // Check Goal 6: Weekly Tarde dos Jogos
+        if (storedUser.lastGamesWeek === currentWeek) completedGoals++;
 
         const percentage = (completedGoals / totalGoals) * 100;
 
@@ -927,7 +934,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Embaixador Digital Logic (Monthly)
     const embaixadorBtns = document.querySelectorAll('#embaixador-btn, #embaixador-btn-full');
-    const currentMonth = (now.getMonth() + 1) + '-' + now.getFullYear();
 
     const updateEmbaixadorUI = () => {
         if (storedUser.lastLinkedInMonth === currentMonth) {
