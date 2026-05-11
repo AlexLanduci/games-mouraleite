@@ -243,12 +243,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    // Try to register immediately
-    registerMissionFormListener();
-    
-    // Also try after a short delay in case DOM is still loading
-    setTimeout(registerMissionFormListener, 100);
-
     const renderCustomMissions = () => {
         const questsGrid = document.getElementById('quests-grid');
         if (!questsGrid) return;
@@ -739,6 +733,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Register mission form listener (after all functions are defined)
+    registerMissionFormListener();
+    setTimeout(registerMissionFormListener, 100);
 
     // Navigation handling
     const navItems = document.querySelectorAll('.nav-item');
