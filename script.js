@@ -1155,6 +1155,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateCheckinUI();
+                triggerCelebration();
+                logSocialActivity('garantiu o check-in diário! 📅', 'fa-calendar-check');
                 addNotification(`Check-in diário realizado! +${earned} pts.`);
                 alert(`Parabéns! Você ganhou ${earned} ponto(s) pelo seu check-in diário.`);
             }
@@ -1237,6 +1239,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateRanking();
         updateUIWithUser();
         renderCustomMissions();
+        triggerCelebration();
+        logSocialActivity(`completou a missão: ${missionName}! ✅`, 'fa-check-circle');
         addNotification(`${missionName} concluída! +${earned} pts.`);
         alert(`Parabéns! Você ganhou ${earned} ponto(s) por completar: ${missionName}`);
     };
@@ -1280,6 +1284,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateRanking();
         updateUIWithUser();
         renderCustomMissions();
+        triggerCelebration();
+        logSocialActivity(`enviou evidência para: ${missionName}! 📸`, 'fa-camera');
         addNotification(`${missionName} enviada para validação! +${earned} pts.`);
         alert(`Foto enviada! Você ganhou ${earned} pontos por: ${missionName}`);
     };
@@ -1323,6 +1329,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateRanking();
         updateUIWithUser();
         renderCustomMissions();
+        triggerCelebration();
+        logSocialActivity(`completou a missão de link: ${missionName}! 🔗`, 'fa-link');
         addNotification(`${missionName} enviada para validação! +${earned} pts.`);
         alert(`Link enviado! Você ganhou ${earned} pontos por: ${missionName}`);
     };
@@ -1390,6 +1398,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateLunchUI();
+                triggerCelebration();
+                logSocialActivity('almoçou com o time de outro depto! 🍽️', 'fa-utensils');
                 addNotification(`Foto enviada e pontos creditados! +${earned} pts.`);
                 alert(`Missão concluída com sucesso! Você ganhou ${earned} pontos.`);
             };
@@ -1457,12 +1467,117 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateRanking();
                 updateUIWithUser();
                 updateReuniaoUI();
+                triggerCelebration();
+                logSocialActivity('participou de uma reunião de integração! 🤝', 'fa-handshake');
                 addNotification(`Foto enviada e pontos creditados! +${earned} pts.`);
                 alert(`Missão concluída com sucesso! Você ganhou ${earned} pontos.`);
             };
             reader.readAsDataURL(file);
         });
     }
+
+    // --- JUICE & SOCIAL FEED FUNCTIONS ---
+    const triggerCelebration = () => {
+        const count = 200;
+        const defaults = { origin: { y: 0.7 } };
+
+        function fire(particleRatio, opts) {
+            confetti({
+                ...defaults,
+                ...opts,
+                particleCount: Math.floor(count * particleRatio)
+            });
+        }
+
+        fire(0.25, { spread: 26, startVelocity: 55 });
+        fire(0.2, { spread: 60 });
+        fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+        fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+        fire(0.1, { spread: 120, startVelocity: 45 });
+    };
+
+    const logSocialActivity = async (message, icon) => {
+        const activity = {
+            user: storedUser.username,
+            avatar: storedUser.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(storedUser.username)}&background=random`,
+            message: message,
+            icon: icon || 'fa-star',
+            timestamp: new Date().toISOString()
+        };
+
+        // Local Fallback
+        const localFeed = JSON.parse(localStorage.getItem('moura_leite_social_feed')) || [];
+        localFeed.unshift(activity);
+        localStorage.setItem('moura_leite_social_feed', JSON.stringify(localFeed.slice(0, 30)));
+
+        // Firestore Sync
+        if (dbAvailable) {
+            try {
+                await db.collection("social_feed").add(activity);
+            } catch (e) {
+                console.error("Erro ao salvar no feed social:", e);
+            }
+        }
+        updateSocialFeedUI();
+    };
+
+    const updateSocialFeedUI = () => {
+        const feedList = document.getElementById('social-feed-list');
+        if (!feedList) return;
+
+        // Use local data for now, then Firestore if available
+        let activities = JSON.parse(localStorage.getItem('moura_leite_social_feed')) || [];
+
+        if (dbAvailable) {
+            db.collection("social_feed")
+                .orderBy("timestamp", "desc")
+                .limit(20)
+                .onSnapshot((snapshot) => {
+                    const firestoreActivities = [];
+                    snapshot.forEach(doc => firestoreActivities.push(doc.data()));
+                    renderFeed(firestoreActivities);
+                }, (error) => {
+                    console.error("Error listening to feed:", error);
+                    renderFeed(activities);
+                });
+        } else {
+            renderFeed(activities);
+        }
+
+        function renderFeed(list) {
+            if (list.length === 0) {
+                feedList.innerHTML = '<p style="padding:1rem; color:#999; text-align:center;">Nenhuma atividade recente.</p>';
+                return;
+            }
+
+            feedList.innerHTML = list.map(act => {
+                const timeAgo = formatTimeAgo(act.timestamp);
+                return `
+                    <div class="feed-item">
+                        <img src="${act.avatar}" class="feed-avatar" alt="Avatar">
+                        <div class="feed-content">
+                            <b>${act.user}</b> ${act.message}
+                            <div class="feed-time">${timeAgo}</div>
+                        </div>
+                        <i class="fa-solid ${act.icon} feed-icon"></i>
+                    </div>
+                `;
+            }).join('');
+        }
+    };
+
+    const formatTimeAgo = (timestamp) => {
+        const diff = Date.now() - new Date(timestamp).getTime();
+        const minutes = Math.floor(diff / 60000);
+        if (minutes < 1) return 'Agora mesmo';
+        if (minutes < 60) return `${minutes}m atrás`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h atrás`;
+        return new Date(timestamp).toLocaleDateString('pt-BR');
+    };
+
+    // Initialize Feed
+    updateSocialFeedUI();
 
     async function saveAndSync() {
         // Save to current session
@@ -1533,6 +1648,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateRanking();
                     updateUIWithUser();
                     updateEmbaixadorUI();
+                    triggerCelebration();
+                    logSocialActivity('brilhou como Embaixador Digital no LinkedIn! 🚀', 'fa-linkedin');
                     addNotification(`Missão Embaixador concluída! +${earned} pts.`);
                     alert(`Sucesso! Você ganhou ${earned} pontos.`);
                 }
