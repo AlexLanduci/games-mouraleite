@@ -1221,16 +1221,24 @@ document.addEventListener('DOMContentLoaded', () => {
         userPoints += earned;
         storedUser.points = userPoints;
         storedUser[lastKey] = dateKey;
-        storedUser.lastMissionTime = serverTimestamp;
-        localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+        const transaction = {
+            user: storedUser.username,
+            item: `Missão: ${missionName}`,
+            date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
+            time: new Date(serverTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            status: 'Concluído',
+            serverTime: serverTimestamp
+        };
+
+        if (!storedUser.history) storedUser.history = [];
+        storedUser.history.unshift(transaction);
         
-        // Sync with global list
-        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
-        const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
-        if (userIndex !== -1) {
-            allUsers[userIndex].points = userPoints;
-            localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
-        }
+        // Global Sync
+        const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+        globalHistory.unshift(transaction);
+        localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+        
+        localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         
         // Log successful mission
         logMissionAttempt(storedUser.email, missionId, missionName, true, serverTimestamp);
@@ -1255,9 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         storedUser[lastKey] = dateKey;
         storedUser.lastMissionTime = serverTimestamp;
         
-        // Record in history with photo
-        if (!storedUser.history) storedUser.history = [];
-        storedUser.history.unshift({
+        const transaction = {
             user: storedUser.username,
             item: `Missão: ${missionName}`,
             date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
@@ -1265,7 +1271,15 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'Validando',
             photo: photoData,
             serverTime: serverTimestamp
-        });
+        };
+
+        if (!storedUser.history) storedUser.history = [];
+        storedUser.history.unshift(transaction);
+        
+        // Global Sync
+        const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+        globalHistory.unshift(transaction);
+        localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         
@@ -1300,9 +1314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         storedUser[lastKey] = dateKey;
         storedUser.lastMissionTime = serverTimestamp;
         
-        // Record in history with link
-        if (!storedUser.history) storedUser.history = [];
-        storedUser.history.unshift({
+        const transaction = {
             user: storedUser.username,
             item: `Missão: ${missionName}`,
             date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
@@ -1310,7 +1322,15 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'Validando',
             link: link,
             serverTime: serverTimestamp
-        });
+        };
+
+        if (!storedUser.history) storedUser.history = [];
+        storedUser.history.unshift(transaction);
+        
+        // Global Sync
+        const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+        globalHistory.unshift(transaction);
+        localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         
