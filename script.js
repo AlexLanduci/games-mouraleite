@@ -11,16 +11,21 @@ window.addEventListener('error', (event) => {
 
 // Check for Firebase availability
 console.log('Checking Firebase dependencies...');
-if (typeof firebase === 'undefined') {
+const firebaseAvailable = typeof firebase !== 'undefined';
+const dbAvailable = typeof db !== 'undefined';
+if (!firebaseAvailable) {
     console.error('Firebase SDK not loaded - check CDN connection');
+}
+if (!dbAvailable) {
+    console.warn('Firestore db is not available. The app will run in local-only mode.');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Script iniciando...', {
         docReady: document.readyState,
         location: window.location.href,
-        hasFirebase: typeof firebase !== 'undefined',
-        hasDb: typeof db !== 'undefined'
+        hasFirebase: firebaseAvailable,
+        hasDb: dbAvailable
     });
     // Global Master Reset (One-time for all users)
     if (!localStorage.getItem('moura_leite_master_reset_v2')) {
@@ -84,6 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let serverTimeLastSync = Date.now();
 
     const syncServerTime = async () => {
+        if (!dbAvailable) {
+            console.warn('Skipping server time sync because Firestore is unavailable.');
+            return;
+        }
+
         try {
             // Use Firebase server timestamp as reference
             const testRef = db.collection('_server_time').doc('sync');
@@ -111,6 +121,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const logMissionAttempt = async (userId, missionId, missionName, success, timestamp) => {
+        if (!dbAvailable) {
+            console.warn('Skipping mission log because Firestore is unavailable.');
+            return;
+        }
+
         try {
             const logsRef = db.collection('mission_logs').doc();
             await logsRef.set({
@@ -142,19 +157,23 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Firebase Real-time Synchronization for Global Users
-    db.collection("users").onSnapshot((snapshot) => {
-        const usersArray = [];
-        snapshot.forEach((doc) => {
-            usersArray.push(doc.data());
+    if (dbAvailable) {
+        db.collection("users").onSnapshot((snapshot) => {
+            const usersArray = [];
+            snapshot.forEach((doc) => {
+                usersArray.push(doc.data());
+            });
+            
+            // Update local global list
+            localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
+            
+            // Re-render UI components that depend on global data
+            if (typeof updateRanking === 'function') updateRanking();
+            if (typeof renderAdminUsers === 'function') renderAdminUsers();
         });
-        
-        // Update local global list
-        localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
-        
-        // Re-render UI components that depend on global data
-        if (typeof updateRanking === 'function') updateRanking();
-        if (typeof renderAdminUsers === 'function') renderAdminUsers();
-    });
+    } else {
+        console.warn('Skipping Firestore user sync because db is unavailable.');
+    }
 
     // Visit Tracking & Date Helpers (Now using server-synced time)
     const now = new Date(getServerTime());
@@ -252,6 +271,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const missionsCollection = dbAvailable ? db.collection('custom_missions') : null;
+    let sharedMissionCache = [];
+
+    const getMissionData = () => {
+        const localMissions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
+        if (dbAvailable) {
+            return sharedMissionCache.length ? sharedMissionCache : localMissions;
+        }
+        return localMissions;
+    };
+
+    const subscribeSharedMissions = () => {
+        if (!dbAvailable || !missionsCollection) {
+            console.warn('Skipping shared missions subscription because Firestore is unavailable.');
+            return;
+        }
+
+        missionsCollection.orderBy('createdAt', 'asc').onSnapshot((snapshot) => {
+            sharedMissionCache = [];
+            snapshot.forEach((doc) => {
+                sharedMissionCache.push(doc.data());
+            });
+            localStorage.setItem('moura_leite_missions', JSON.stringify(sharedMissionCache));
+            renderCustomMissions();
+            console.log('Shared missions synced from Firestore:', sharedMissionCache.length);
+        }, (error) => {
+            console.error('Error syncing shared missions:', error);
+        });
+    };
+
     // Register mission form listener once
     const registerMissionFormListener = () => {
         const missionForm = document.getElementById('mission-form');
@@ -273,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Remove previously injected custom missions to avoid duplicates
         questsGrid.querySelectorAll('.custom-quest-card').forEach(card => card.remove());
 
-        const missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
+        const missions = getMissionData();
         if (missions.length === 0) {
             return;
         }
@@ -354,10 +403,13 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         try {
-            // Save to localStorage for now (could be Firebase later)
             const missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
             missions.push(newMission);
             localStorage.setItem('moura_leite_missions', JSON.stringify(missions));
+
+            if (dbAvailable && missionsCollection) {
+                await missionsCollection.doc(newMission.id).set(newMission);
+            }
 
             console.log('Mission saved successfully:', newMission);
             alert('Missão cadastrada com sucesso!');
@@ -373,16 +425,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.deleteMission = (missionId) => {
+    window.deleteMission = async (missionId) => {
         if (!confirm('Deseja excluir esta missão permanentemente?')) return;
         const missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
         const updated = missions.filter(m => m.id !== missionId);
         localStorage.setItem('moura_leite_missions', JSON.stringify(updated));
+        if (dbAvailable && missionsCollection) {
+            try {
+                await missionsCollection.doc(missionId).delete();
+            } catch (e) {
+                console.error('Erro ao excluir missão no Firestore:', e);
+            }
+        }
         renderCustomMissions();
         alert('Missão excluída com sucesso.');
     };
 
-    window.editMission = (missionId) => {
+    window.editMission = async (missionId) => {
         const missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
         const mission = missions.find(m => m.id === missionId);
         if (!mission) return alert('Missão não encontrada.');
@@ -405,6 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
         mission.validationType = ['button','photo','link'].includes(newValidationType) ? newValidationType : mission.validationType;
 
         localStorage.setItem('moura_leite_missions', JSON.stringify(missions));
+        if (dbAvailable && missionsCollection) {
+            try {
+                await missionsCollection.doc(missionId).set(mission, { merge: true });
+            } catch (e) {
+                console.error('Erro ao atualizar missão no Firestore:', e);
+            }
+        }
         renderCustomMissions();
         alert('Missão atualizada com sucesso.');
     };
@@ -760,6 +826,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Register mission form listener (after all functions are defined)
     registerMissionFormListener();
     setTimeout(registerMissionFormListener, 100);
+
+    // Subscribe to shared missions so all users see created missions
+    subscribeSharedMissions();
 
     // Navigation handling
     const navItems = document.querySelectorAll('.nav-item');
