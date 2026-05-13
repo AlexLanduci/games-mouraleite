@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><strong>${user.username}</strong></td>
                     <td>${user.email}</td>
                     <td>${user.dept || '-'}</td>
-                    <td>${user.diretoria || '-'}</td>
+                    <td>${user.diretoria ? (user.diretoria.replace(/^diretoria-/i, '').charAt(0).toUpperCase() + user.diretoria.replace(/^diretoria-/i, '').slice(1)) : '-'}</td>
                     <td>${user.points} pts</td>
                     <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
                     <td>
@@ -1036,7 +1036,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         fullRankingBody.innerHTML = sortedUsers.map((user, index) => {
             const deptDisplay = user.dept ? (user.dept.length <= 3 ? user.dept.toUpperCase() : user.dept.charAt(0).toUpperCase() + user.dept.slice(1)) : 'Geral';
-            const dirDisplay = user.diretoria ? (user.diretoria.charAt(0).toUpperCase() + user.diretoria.slice(1)) : 'Moura Leite';
+            const dirRaw = user.diretoria ? user.diretoria.replace(/^diretoria-/i, '') : '';
+            const dirDisplay = dirRaw ? (dirRaw.charAt(0).toUpperCase() + dirRaw.slice(1)) : 'Moura Leite';
             
             return `
                 <tr>
