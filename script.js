@@ -174,8 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const currentUserInDb = usersArray.find(u => u.email === storedUser.email);
                 if (currentUserInDb) {
                     // Se o servidor tem MAIS pontos que o local (ex: Admin editou), atualizamos o local
-                    if ((currentUserInDb.points || 0) > userPoints) {
-                        userPoints = currentUserInDb.points;
+                    if (parseInt(currentUserInDb.points || 0) > userPoints) {
+                        userPoints = parseInt(currentUserInDb.points);
                         storedUser.points = userPoints;
                         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
                         updatePointsDisplay();
@@ -852,7 +852,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    let userPoints = storedUser.points;
+    let userPoints = parseInt(storedUser.points) || 0;
     const pointsElement = document.getElementById('user-points');
     
     // Visit Tracking (Cumulative Days)
@@ -1540,8 +1540,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveAndSync = async () => {
         try {
-            // Ensure points are synced
-            storedUser.points = userPoints;
+            // Ensure points are synced as numbers
+            storedUser.points = parseInt(userPoints) || 0;
             
             // Save locally
             localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
