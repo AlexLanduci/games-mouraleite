@@ -66,7 +66,12 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_global_history', JSON.stringify([]));
         
         // Update current session if not admin
-        let sessionUser = JSON.parse(localStorage.getItem('moura_leite_user'));
+        const sessionUserRaw = localStorage.getItem('moura_leite_user');
+        let sessionUser = sessionUserRaw ? JSON.parse(sessionUserRaw) : null;
+        if (sessionUser && sessionUser.email) {
+            sessionUser.email = sessionUser.email.toLowerCase();
+        }
+        
         if (sessionUser && sessionUser.email !== 'admin@mouraleite.com.br') {
             sessionUser.points = 0;
             sessionUser.history = [];
@@ -151,12 +156,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(syncServerTime, 600000);
 
     // Load User Data from LocalStorage (Current Session)
-    const storedUser = JSON.parse(localStorage.getItem('moura_leite_user')) || {
+    const storedUserRaw = localStorage.getItem('moura_leite_user');
+    const storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : {
         username: 'Novo Colaborador',
         points: 0,
         rank: 'Iniciante',
         dept: 'Moura Leite'
     };
+    if (storedUser.email) storedUser.email = storedUser.email.toLowerCase();
 
     // Firebase Real-time Synchronization for Global Users
     if (dbAvailable) {
@@ -168,6 +175,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Update local global list
             localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
+
+            // Real-time Global History Sync for Admins
+            if (isAdmin) {
+                db.collection("global_history").orderBy("serverTime", "desc").limit(50).onSnapshot((histSnapshot) => {
+                    const globalHistory = [];
+                    histSnapshot.forEach((doc) => globalHistory.push(doc.data()));
+                    localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+                    if (document.getElementById('historico-page') && !document.getElementById('historico-page').classList.contains('hidden')) {
+                        renderHistory();
+                    }
+                });
+            }
 
             // EMERGENCY SYNC: Detect point discrepancies for the current user
             if (storedUser && storedUser.email) {
@@ -1496,6 +1515,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Sync to Firestore if available
             if (dbAvailable) {
                 await db.collection('users').doc(storedUser.email).set(storedUser, { merge: true });
+                
+                // Fetch and store global history
+                const globalHistorySnapshot = await db.collection('history').orderBy('serverTime', 'desc').limit(50).get();
+                const globalHistory = globalHistorySnapshot.docs.map(doc => doc.data());
+                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+                
                 console.log('✅ Sincronização com Firestore concluída para:', storedUser.email);
             }
         } catch (error) {
@@ -1509,11 +1534,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Global Audit Tool for Admin (Run via console)
     window.recalcularTodosOsPontos = async () => {
-        if (!confirm("⚠️ ATENÇÃO: Isso irá recalcular os pontos de TODOS os usuários cadastrados baseando-se no histórico de missões e compras. Deseja continuar?")) return;
+        if (!confirm("⚠️ ATENÇÃO: Isso irá recalcular os pontos de TODOS os usuários baseando-se no histórico e nos LOGS DE SISTEMA. Deseja continuar?")) return;
         
-        console.log("🚀 Iniciando auditoria global de pontos...");
+        console.log("🚀 Iniciando auditoria global avançada...");
         try {
             const snapshot = await db.collection("users").get();
+            const logsSnapshot = await db.collection("mission_logs").get();
+            
+            // Map logs by user
+            const allLogs = [];
+            logsSnapshot.forEach(doc => allLogs.push(doc.data()));
+
             let updatedCount = 0;
 
             const missionPointsMap = {
@@ -1528,42 +1559,54 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const doc of snapshot.docs) {
                 const user = doc.data();
                 const history = user.history || [];
+                const userLogs = allLogs.filter(l => l.userId === user.email && l.success);
+                
                 let calculatedPoints = 0;
+                let processedMissions = new Set();
 
+                // 1. Analyze user history
                 history.forEach(tx => {
-                    // 1. Try to parse points from detailed format (+X pts)
                     const gainedMatch = tx.item.match(/\(\+(\d+)\s*pts\)/);
                     if (gainedMatch) {
                         calculatedPoints += parseInt(gainedMatch[1]);
                     } else {
-                        // 2. Fallback to name mapping
                         for (const [name, pts] of Object.entries(missionPointsMap)) {
                             if (tx.item.includes(name)) {
                                 calculatedPoints += pts;
+                                processedMissions.add(name);
                                 break;
                             }
                         }
                     }
-                    // 3. Subtract spent points
                     const spentMatch = tx.item.match(/\(-(\d+)\s*pts\)/);
-                    if (spentMatch) {
-                        calculatedPoints -= parseInt(spentMatch[1]);
+                    if (spentMatch) calculatedPoints -= parseInt(spentMatch[1]);
+                });
+
+                // 2. RECOVERY: Check mission_logs for missions NOT in history
+                userLogs.forEach(log => {
+                    const missionName = log.missionName;
+                    const pts = missionPointsMap[missionName] || 0;
+                    
+                    // Simple heuristic: if mission is in logs but not explicitly in history, count it
+                    if (pts > 0 && !processedMissions.has(missionName)) {
+                        console.log(`🔎 Recuperado dos logs para ${user.username}: ${missionName} (+${pts} pts)`);
+                        calculatedPoints += pts;
+                        processedMissions.add(missionName); 
                     }
                 });
 
-                // If calculated points differ from current points, update Firebase
                 if (calculatedPoints !== user.points) {
-                    console.log(`👤 Usuário: ${user.username} | Banco: ${user.points} -> Calculado: ${calculatedPoints}`);
+                    console.log(`👤 ${user.username}: ${user.points} -> ${calculatedPoints}`);
                     await db.collection("users").doc(user.email).update({ points: calculatedPoints });
                     updatedCount++;
                 }
             }
             
-            alert(`✅ Auditoria finalizada! ${updatedCount} usuários tiveram seus pontos corrigidos.`);
+            alert(`✅ Auditoria finalizada! ${updatedCount} usuários foram corrigidos.`);
             window.location.reload();
         } catch (error) {
             console.error("Erro na auditoria:", error);
-            alert("Erro ao realizar auditoria. Verifique o console.");
+            alert("Erro ao realizar auditoria.");
         }
     };
 
@@ -1759,10 +1802,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync
+        // Global Sync (Local and Firestore)
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+        
+        if (dbAvailable) {
+            db.collection('global_history').add({
+                ...transaction,
+                serverTime: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
+        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();
@@ -1817,10 +1867,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync
+        // Global Sync (Local and Firestore)
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
+        if (dbAvailable) {
+            db.collection('global_history').add({
+                ...transaction,
+                serverTime: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
+        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();
@@ -1879,10 +1936,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync
+        // Global Sync (Local and Firestore)
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
+        if (dbAvailable) {
+            db.collection('global_history').add({
+                ...transaction,
+                serverTime: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
+        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();

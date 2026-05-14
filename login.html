@@ -176,7 +176,8 @@
 
             // Helper to find or create user in Firestore
             const getOrCreateUser = async (email, username, defaultPoints) => {
-                const userRef = db.collection("users").doc(email);
+                const cleanEmail = email.toLowerCase();
+                const userRef = db.collection("users").doc(cleanEmail);
                 const userSnap = await userRef.get();
                 
                 if (userSnap.exists) {
@@ -198,7 +199,7 @@
             // Auth Logic (Firebase)
             document.getElementById('login-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const email = document.getElementById('login-email').value;
+                const email = document.getElementById('login-email').value.trim().toLowerCase();
                 const pass = document.getElementById('login-pass').value;
                 const submitBtn = e.target.querySelector('button[type="submit"]');
                 
@@ -326,7 +327,7 @@
             document.getElementById('signup-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const username = document.getElementById('reg-user').value;
-                const email = document.getElementById('reg-email').value;
+                const email = document.getElementById('reg-email').value.trim().toLowerCase();
                 const dept = document.getElementById('reg-dept').value;
                 const diretoria = document.getElementById('reg-dir').value;
                 const cpf = document.getElementById('reg-cpf').value;
