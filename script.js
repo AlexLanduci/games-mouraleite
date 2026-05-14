@@ -169,19 +169,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update local global list
             localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
 
-            // PROTEÇÃO DE PONTOS: Garante que edições do Admin não sejam sobrescritas por cache local antigo
+            // FIREBASE É A FONTE DA VERDADE: Sempre sincroniza pontos do servidor para o local
             if (storedUser && storedUser.email) {
                 const currentUserInDb = usersArray.find(u => u.email === storedUser.email);
                 if (currentUserInDb) {
-                    // Se o servidor tem MAIS pontos que o local (ex: Admin editou), atualizamos o local
-                    if (parseInt(currentUserInDb.points || 0) > userPoints) {
-                        userPoints = parseInt(currentUserInDb.points);
+                    const serverPoints = parseInt(currentUserInDb.points) || 0;
+                    if (serverPoints !== userPoints) {
+                        console.log(`🔄 Sincronizando pontos do servidor: Local(${userPoints}) → Server(${serverPoints})`);
+                        userPoints = serverPoints;
                         storedUser.points = userPoints;
                         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
                         updatePointsDisplay();
-                        console.log(`📥 Pontos atualizados via Admin para ${storedUser.email}: ${userPoints} pts.`);
                     }
-                    // Se o local for maior e o servidor estiver com 0 ou desatualizado, o saveAndSync (em outras partes) resolverá.
                 }
             }
             
@@ -1901,7 +1900,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     };
 
-    saveAndSync();
+    // NÃO chamar saveAndSync() no carregamento — Firebase é a fonte da verdade.
+    // Os pontos só devem ser enviados ao Firebase quando o usuário COMPLETAR uma ação.
     updateCheckinUI();
     updatePointsDisplay();
     updateRanking();
