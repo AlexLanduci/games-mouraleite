@@ -1449,6 +1449,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderNotifications();
 
+    const saveAndSync = async () => {
+        try {
+            // Ensure points are synced
+            storedUser.points = userPoints;
+            
+            // Save locally
+            localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+            
+            // Update global list locally for immediate feedback
+            const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+            const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
+            if (userIndex !== -1) {
+                allUsers[userIndex].points = userPoints;
+                localStorage.setItem('moura_leite_all_users', JSON.stringify(allUsers));
+            }
+            
+            // Sync to Firestore if available
+            if (dbAvailable && storedUser.email) {
+                await db.collection('users').doc(storedUser.email).set(storedUser, { merge: true });
+                console.log('Sincronização com Firestore concluída.');
+            }
+        } catch (error) {
+            console.error('Erro em saveAndSync:', error);
+        }
+    };
+
     const checkinBtns = document.querySelectorAll('#checkin-btn, #checkin-btn-full');
     const checkinStatus = document.getElementById('checkin-status');
 
@@ -1572,6 +1598,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+        saveAndSync();
         
         // Log successful mission
         logMissionAttempt(storedUser.email, missionId, missionName, true, serverTimestamp);
@@ -1615,8 +1642,9 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+        saveAndSync();
         
-        // Sync with global list
+        // Sync with global list (redundant if saveAndSync works but kept for safety)
         const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
         if (userIndex !== -1) {
@@ -1666,8 +1694,9 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+        saveAndSync();
         
-        // Sync with global list
+        // Sync with global list (redundant if saveAndSync works but kept for safety)
         const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         const userIndex = allUsers.findIndex(u => u.email === storedUser.email);
         if (userIndex !== -1) {
@@ -1739,9 +1768,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveAndSync();
     updateCheckinUI();
-    updateLunchUI();
-    updateEmbaixadorUI();
-    updateJogosUI();
     updatePointsDisplay();
     updateRanking();
     updateUIWithUser();
