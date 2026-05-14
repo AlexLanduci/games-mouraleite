@@ -17,6 +17,13 @@
 
 <body>
     <script>
+        // Force Logout Logic (to refresh sessions)
+        const AUTH_VERSION = '1.1';
+        if (localStorage.getItem('moura_leite_auth_version') !== AUTH_VERSION) {
+            localStorage.removeItem('moura_leite_user');
+            localStorage.setItem('moura_leite_auth_version', AUTH_VERSION);
+        }
+
         // Auth Guard: Redirect to login if no user is found
         if (!localStorage.getItem('moura_leite_user')) {
             window.location.href = 'login.html';
