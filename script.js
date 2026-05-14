@@ -1138,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const newTransaction = {
                     user: storedUser.username,
-                    item: itemName,
+                    item: `${itemName} (-${price} pts)`,
                     date: now.toLocaleDateString('pt-BR'),
                     time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                     status: 'Concluído'
@@ -1255,7 +1255,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const now = new Date(serverNow);
             const transaction = {
                 user: storedUser.username,
-                item: 'Boost de Pontos 2x (24h)',
+                item: `Boost de Pontos 2x (24h) (-${price} pts)`,
                 date: now.toLocaleDateString('pt-BR'),
                 time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                 status: 'Ativo'
@@ -1582,7 +1582,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const transaction = {
             user: storedUser.username,
-            item: `Missão: ${missionName}`,
+            item: `Missão: ${missionName} (+${earned} pts)`,
             date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
             time: new Date(serverTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             status: 'Concluído',
@@ -1625,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const transaction = {
             user: storedUser.username,
-            item: `Missão: ${missionName}`,
+            item: `Missão: ${missionName} (+${earned} pts)`,
             date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
             time: new Date(serverTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             status: 'Validando',
@@ -1677,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const transaction = {
             user: storedUser.username,
-            item: `Missão: ${missionName}`,
+            item: `Missão: ${missionName} (+${earned} pts)`,
             date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
             time: new Date(serverTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             status: 'Validando',
