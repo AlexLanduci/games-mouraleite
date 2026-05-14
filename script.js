@@ -168,6 +168,26 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Update local global list
             localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
+
+            // EMERGENCY SYNC: Detect point discrepancies for the current user
+            if (storedUser && storedUser.email) {
+                const currentUserInDb = usersArray.find(u => u.email === storedUser.email);
+                if (currentUserInDb) {
+                    // If local points are higher than server points, force a push to server
+                    if (userPoints > (currentUserInDb.points || 0)) {
+                        console.log(`⚡ Discrepância detectada para ${storedUser.email}: Local(${userPoints}) > Server(${currentUserInDb.points || 0}). Forçando sincronização...`);
+                        saveAndSync();
+                    } 
+                    // If server points are higher (e.g. admin edit), update local
+                    else if ((currentUserInDb.points || 0) > userPoints) {
+                        userPoints = currentUserInDb.points;
+                        storedUser.points = userPoints;
+                        localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+                        updatePointsDisplay();
+                        console.log(`📥 Pontos atualizados do servidor para ${storedUser.email}: ${userPoints} pts.`);
+                    }
+                }
+            }
             
             // Re-render UI components that depend on global data
             if (typeof updateRanking === 'function') updateRanking();
@@ -1454,6 +1474,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveAndSync = async () => {
         try {
+            if (!storedUser || !storedUser.email) {
+                console.warn('Sincronização abortada: Usuário sem e-mail ou não logado corretamente.');
+                return;
+            }
+
             // Ensure points are synced
             storedUser.points = userPoints;
             
@@ -1469,12 +1494,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Sync to Firestore if available
-            if (dbAvailable && storedUser.email) {
+            if (dbAvailable) {
                 await db.collection('users').doc(storedUser.email).set(storedUser, { merge: true });
-                console.log('Sincronização com Firestore concluída.');
+                console.log('✅ Sincronização com Firestore concluída para:', storedUser.email);
             }
         } catch (error) {
-            console.error('Erro em saveAndSync:', error);
+            console.error('❌ Erro crítico em saveAndSync:', error);
+            // Se houver erro de permissão, pode ser necessário relogar
+            if (error.code === 'permission-denied') {
+                console.warn('Erro de permissão: O usuário pode precisar fazer login novamente.');
+            }
         }
     };
 
