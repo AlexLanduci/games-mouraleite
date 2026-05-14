@@ -66,12 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('moura_leite_global_history', JSON.stringify([]));
         
         // Update current session if not admin
-        const sessionUserRaw = localStorage.getItem('moura_leite_user');
-        let sessionUser = sessionUserRaw ? JSON.parse(sessionUserRaw) : null;
-        if (sessionUser && sessionUser.email) {
-            sessionUser.email = sessionUser.email.toLowerCase();
-        }
-        
+        let sessionUser = JSON.parse(localStorage.getItem('moura_leite_user'));
         if (sessionUser && sessionUser.email !== 'admin@mouraleite.com.br') {
             sessionUser.points = 0;
             sessionUser.history = [];
@@ -156,14 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(syncServerTime, 600000);
 
     // Load User Data from LocalStorage (Current Session)
-    const storedUserRaw = localStorage.getItem('moura_leite_user');
-    const storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : {
+    const storedUser = JSON.parse(localStorage.getItem('moura_leite_user')) || {
         username: 'Novo Colaborador',
         points: 0,
         rank: 'Iniciante',
         dept: 'Moura Leite'
     };
-    if (storedUser.email) storedUser.email = storedUser.email.toLowerCase();
 
     // Firebase Real-time Synchronization for Global Users
     if (dbAvailable) {
@@ -176,39 +169,25 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update local global list
             localStorage.setItem('moura_leite_all_users', JSON.stringify(usersArray));
 
-            // Real-time Global History Sync for Admins
-            if (isAdmin) {
-                db.collection("global_history").orderBy("serverTime", "desc").limit(50).onSnapshot((histSnapshot) => {
-                    const globalHistory = [];
-                    histSnapshot.forEach((doc) => globalHistory.push(doc.data()));
-                    localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
-                    if (document.getElementById('historico-page') && !document.getElementById('historico-page').classList.contains('hidden')) {
-                        renderHistory();
-                    }
-                });
-            }
-
-            // EMERGENCY SYNC: Detect point discrepancies for the current user
+            // PROTEÇÃO DE PONTOS: Garante que edições do Admin não sejam sobrescritas por cache local antigo
             if (storedUser && storedUser.email) {
                 const currentUserInDb = usersArray.find(u => u.email === storedUser.email);
                 if (currentUserInDb) {
-                    // EMERGENCY SYNC: Trust the server as the source of truth
-                    if (userPoints !== (currentUserInDb.points || 0)) {
-                        console.log(`🔄 Sincronizando pontos com o servidor para ${storedUser.email}: ${userPoints} -> ${currentUserInDb.points || 0}`);
-                        
-                        // Update local variables to match server
-                        userPoints = currentUserInDb.points || 0;
+                    // Se o servidor tem MAIS pontos que o local (ex: Admin editou), atualizamos o local
+                    if ((currentUserInDb.points || 0) > userPoints) {
+                        userPoints = currentUserInDb.points;
                         storedUser.points = userPoints;
                         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
-                        
                         updatePointsDisplay();
+                        console.log(`📥 Pontos atualizados via Admin para ${storedUser.email}: ${userPoints} pts.`);
                     }
+                    // Se o local for maior e o servidor estiver com 0 ou desatualizado, o saveAndSync (em outras partes) resolverá.
                 }
             }
             
             // Re-render UI components that depend on global data
-            if (typeof updateRanking === 'function') updateRanking(usersArray);
-            if (typeof renderAdminUsers === 'function') renderAdminUsers(usersArray);
+            if (typeof updateRanking === 'function') updateRanking();
+            if (typeof renderAdminUsers === 'function') renderAdminUsers();
         });
     } else {
         console.warn('Skipping Firestore user sync because db is unavailable.');
@@ -254,16 +233,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const isAdmin = storedUser.email === 'admin@mouraleite.com.br';
-    
-    // Show Admin UI elements
-    if (isAdmin) {
-        const adminItem = document.getElementById('admin-menu-item');
-        const adminMissionsItem = document.getElementById('admin-missions-menu-item');
-        const emergencyTools = document.getElementById('admin-emergency-tools');
-        if (adminItem) adminItem.classList.remove('hidden');
-        if (adminMissionsItem) adminMissionsItem.classList.remove('hidden');
-        if (emergencyTools) emergencyTools.classList.remove('hidden');
-    }
     const adminMenuItem = document.getElementById('admin-menu-item');
     const adminMissionsMenuItem = document.getElementById('admin-missions-menu-item');
     if (isAdmin && adminMenuItem) {
@@ -324,28 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Admin Mission Creation Logic
-    window.editUserPoints = async (email, currentPoints) => {
-        const newPoints = prompt(`Editar pontos de ${email}:\nValor atual: ${currentPoints}`, currentPoints);
-        if (newPoints !== null && !isNaN(newPoints)) {
-            try {
-                const pts = parseInt(newPoints);
-                await db.collection("users").doc(email).update({ points: pts });
-                alert("Pontos atualizados com sucesso!");
-                // Sincronizar localmente se for o próprio admin
-                if (storedUser.email === email) {
-                    userPoints = pts;
-                    storedUser.points = pts;
-                    localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
-                }
-                updateRanking();
-                renderAdminUsers();
-            } catch (error) {
-                console.error("Erro ao atualizar pontos:", error);
-                alert("Erro ao salvar no banco de dados.");
-            }
-        }
-    };
-
     const renderAdminMissions = () => {
         const iconSelect = document.getElementById('mission-icon');
         const iconPreview = document.getElementById('mission-icon-preview');
@@ -812,6 +759,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    window.reconcileAllUsersPoints = async () => {
+        if (!confirm("⚠️ ATENÇÃO: Esta ferramenta irá ler o histórico de todos os usuários e recalcular os pontos totais com base nas missões concluídas. Isso irá sobrescrever os valores atuais no Firebase. Deseja continuar?")) return;
+        
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processando...';
+
+        try {
+            const usersSnap = await db.collection("users").get();
+            const pointValues = {
+                'Check-in Diário': 1,
+                'Almoço Moura Leite': 5,
+                'Reunião de Integração': 8,
+                'Embaixador Digital': 15,
+                'Engajamento Viva Engage': 12,
+                'Dinâmica de Jogos': 20
+            };
+
+            let fixedCount = 0;
+
+            for (const doc of usersSnap.docs) {
+                const user = doc.data();
+                const history = user.history || [];
+                let calculatedPoints = 0;
+
+                history.forEach(tx => {
+                    // Only count successful/valid transactions
+                    if (tx.status === 'Concluído' || tx.status === 'Validando' || tx.status === 'Ativo') {
+                        // 1. Try to parse points from the new format: "item (+X pts)" or "item (-X pts)"
+                        const earnedMatch = tx.item.match(/\(\+(\d+)\s+pts\)/);
+                        const spentMatch = tx.item.match(/\(\-(\d+)\s+pts\)/);
+
+                        if (earnedMatch) {
+                            calculatedPoints += parseInt(earnedMatch[1]);
+                        } else if (spentMatch) {
+                            calculatedPoints -= parseInt(spentMatch[1]);
+                        } else {
+                            // 2. Legacy format - guess based on mission name
+                            for (const [name, val] of Object.entries(pointValues)) {
+                                if (tx.item.includes(name)) {
+                                    calculatedPoints += val;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Update server if different
+                if (calculatedPoints !== (user.points || 0)) {
+                    await db.collection("users").doc(user.email).update({ points: calculatedPoints });
+                    fixedCount++;
+                }
+            }
+
+            alert(`✅ Sucesso! Auditoria finalizada. ${fixedCount} usuários tiveram seus pontos corrigidos.`);
+        } catch (error) {
+            console.error("Erro na auditoria:", error);
+            alert("Erro ao processar auditoria. Verifique o console.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    };
+
     window.deleteUser = async (email) => {
         if (confirm(`Tem certeza que deseja EXCLUIR permanentemente o usuário ${email}?`)) {
             try {
@@ -1030,17 +1043,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Update Ranking with All Users (excluding admin)
-    const updateRanking = (providedUsers = null) => {
+    const updateRanking = () => {
         const rankingContainer = document.querySelector('.ranking-list');
         if (!rankingContainer) return;
 
-        // Use provided users from snapshot or fallback to local
-        const allUsers = providedUsers || JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+        // Get all users from global list
+        const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
         
-        // Filter out admin and sort by points strictly from server data
+        // Filter out admin and sort by points
         const sortedUsers = allUsers
             .filter(u => u.email !== 'admin@mouraleite.com.br')
-            .sort((a, b) => (b.points || 0) - (a.points || 0));
+            .sort((a, b) => b.points - a.points);
 
         if (sortedUsers.length === 0) {
             rankingContainer.innerHTML = '<p style="padding:1rem; color:#999; text-align:center;">Nenhum usuário no ranking.</p>';
@@ -1048,16 +1061,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         rankingContainer.innerHTML = sortedUsers.map((user, index) => {
-            const isMe = user.email === (storedUser ? storedUser.email : '');
+            const isMe = user.email === storedUser.email;
             const rankClass = index === 0 ? 'first' : (isMe ? 'me' : '');
-            const pointsValue = user.points || 0;
             
             return `
                 <div class="rank-item ${rankClass}">
                     <span class="pos">${index + 1}</span>
                     <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=${index === 0 ? 'F1863B' : '006837'}&color=fff" alt="">
                     <span class="name">${isMe ? 'Você' : user.username}</span>
-                    <span class="pts">${pointsValue.toLocaleString()} pts</span>
+                    <span class="pts">${user.points.toLocaleString()} pts</span>
                 </div>
             `;
         }).join('');
@@ -1117,13 +1129,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             try {
                 await db.collection("users").doc(email).update(updates);
+                console.log(`Usuário ${email} atualizado com sucesso no Firestore.`);
                 
                 // Update local session if editing self
                 if (email === storedUser.email) {
+                    userPoints = points; // Atualiza a variável global de pontos
                     Object.assign(storedUser, updates);
                     localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
+                    updatePointsDisplay();
                     updateUIWithUser();
                 }
+
+                // Força atualização da lista de usuários para o Admin
+                if (typeof renderAdminUsers === 'function') renderAdminUsers();
+                if (typeof updateRanking === 'function') updateRanking();
 
                 alert('Usuário atualizado com sucesso!');
                 modalEditUser.classList.add('hidden');
@@ -1521,11 +1540,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveAndSync = async () => {
         try {
-            if (!storedUser || !storedUser.email) {
-                console.warn('Sincronização abortada: Usuário sem e-mail ou não logado corretamente.');
-                return;
-            }
-
             // Ensure points are synced
             storedUser.points = userPoints;
             
@@ -1541,175 +1555,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Sync to Firestore if available
-            if (dbAvailable) {
+            if (dbAvailable && storedUser.email) {
                 await db.collection('users').doc(storedUser.email).set(storedUser, { merge: true });
-                
-                // Fetch and store global history
-                const globalHistorySnapshot = await db.collection('history').orderBy('serverTime', 'desc').limit(50).get();
-                const globalHistory = globalHistorySnapshot.docs.map(doc => doc.data());
-                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
-                
-                console.log('✅ Sincronização com Firestore concluída para:', storedUser.email);
+                console.log('Sincronização com Firestore concluída.');
             }
         } catch (error) {
-            console.error('❌ Erro crítico em saveAndSync:', error);
-            // Se houver erro de permissão, pode ser necessário relogar
-            if (error.code === 'permission-denied') {
-                console.warn('Erro de permissão: O usuário pode precisar fazer login novamente.');
-            }
-        }
-    };
-
-    // Global Audit Tool for Admin (Run via console)
-    window.recalcularTodosOsPontos = async () => {
-        if (!confirm("⚠️ ATENÇÃO: Isso irá recalcular os pontos de TODOS os usuários cadastrados baseando-se no histórico, missões customizadas e logs. Deseja continuar?")) return;
-        
-        console.log("🚀 Iniciando auditoria global super-robusta...");
-        try {
-            const usersSnapshot = await db.collection("users").get();
-            const logsSnapshot = await db.collection("mission_logs").get();
-            const missionsSnapshot = await db.collection("missions").get();
-            
-            // Build a dynamic map of all missions (system + custom)
-            const missionPointsMap = {
-                'Check-in Diário': 1,
-                'Integração entre Times': 5,
-                'Reunião de Integração': 8,
-                'Embaixador Digital': 15,
-                'Engajamento Viva Engage': 12,
-                'Dinâmica de Jogos': 20
-            };
-            
-            missionsSnapshot.forEach(doc => {
-                const m = doc.data();
-                if (m.name && m.points) {
-                    missionPointsMap[m.name] = parseInt(m.points);
-                }
-            });
-            
-            const allLogs = [];
-            logsSnapshot.forEach(doc => allLogs.push(doc.data()));
-
-            let updatedCount = 0;
-
-            for (const doc of usersSnapshot.docs) {
-                const user = doc.data();
-                const userId = doc.id; // Source of truth for document updates
-                const history = user.history || [];
-                const userLogs = allLogs.filter(l => (l.userId === userId || (user.email && l.userId === user.email.toLowerCase())) && l.success);
-                
-                let calculatedPoints = 0;
-                let processedMissions = new Set();
-
-                history.forEach(tx => {
-                    const gainedMatch = tx.item.match(/\(\+(\d+)\s*pts\)/);
-                    let missionName = null;
-                    let pts = 0;
-
-                    if (gainedMatch) {
-                        pts = parseInt(gainedMatch[1]);
-                        missionName = tx.item.split('(+')[0].replace('Missão: ', '').trim();
-                    } else {
-                        for (const [name, p] of Object.entries(missionPointsMap)) {
-                            if (tx.item.includes(name)) {
-                                missionName = name;
-                                pts = p;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (missionName && pts > 0) {
-                        // Use a composite key to avoid double counting same mission on same date
-                        const dateKey = tx.date || 'unknown';
-                        const uniqueKey = `${missionName}_${dateKey}`;
-                        
-                        if (!processedMissions.has(uniqueKey)) {
-                            calculatedPoints += pts;
-                            processedMissions.add(uniqueKey);
-                        }
-                    }
-
-                    const spentMatch = tx.item.match(/\(-(\d+)\s*pts\)/);
-                    if (spentMatch) calculatedPoints -= parseInt(spentMatch[1]);
-                });
-
-                // 2. Recovery from logs
-                userLogs.forEach(log => {
-                    const missionName = log.missionName;
-                    const pts = missionPointsMap[missionName] || 0;
-                    if (pts > 0 && !processedMissions.has(missionName)) {
-                        console.log(`🔎 [LOG RECOVERY] p/ ${user.username || userId}: ${missionName} (+${pts} pts)`);
-                        calculatedPoints += pts;
-                        processedMissions.add(missionName); 
-                    }
-                });
-
-                if (calculatedPoints !== (user.points || 0)) {
-                    console.log(`👤 Corrigindo ${user.username || userId}: ${user.points || 0} -> ${calculatedPoints}`);
-                    await db.collection("users").doc(userId).update({ points: calculatedPoints });
-                    updatedCount++;
-                }
-            }
-            
-            alert(`✅ Auditoria finalizada! ${updatedCount} usuários foram corrigidos.`);
-            window.location.reload();
-        } catch (error) {
-            console.error("Erro na auditoria:", error);
-            alert("Erro ao realizar auditoria. Verifique o console.");
-        }
-    };
-
-    const healUserPoints = () => {
-        try {
-            if (userPoints > 0) return; // Only attempt recovery if current points are 0
-            if (!storedUser.history || storedUser.history.length === 0) return;
-
-            console.log("🩹 Auditoria: Detectado usuário com 0 pontos mas com histórico. Iniciando recuperação...");
-            let recoveredPoints = 0;
-            
-            // Map of system missions and their point values
-            const missionPointsMap = {
-                'Check-in Diário': 1,
-                'Integração entre Times': 5,
-                'Reunião de Integração': 8,
-                'Embaixador Digital': 15,
-                'Engajamento Viva Engage': 12,
-                'Dinâmica de Jogos': 20
-            };
-
-            storedUser.history.forEach(tx => {
-                // 1. Try to parse points from the new detailed format "(+X pts)"
-                const gainedMatch = tx.item.match(/\(\+(\d+)\s*pts\)/);
-                if (gainedMatch) {
-                    recoveredPoints += parseInt(gainedMatch[1]);
-                } else {
-                    // 2. Fallback to mission name mapping for older history entries
-                    for (const [name, pts] of Object.entries(missionPointsMap)) {
-                        if (tx.item.includes(name)) {
-                            recoveredPoints += pts;
-                            break;
-                        }
-                    }
-                }
-
-                // 3. Subtract spent points if any purchases were made
-                const spentMatch = tx.item.match(/\(-(\d+)\s*pts\)/);
-                if (spentMatch) {
-                    recoveredPoints -= parseInt(spentMatch[1]);
-                }
-            });
-
-            if (recoveredPoints > 0) {
-                console.log(`✅ Sucesso! Foram recuperados ${recoveredPoints} pontos do histórico.`);
-                userPoints = recoveredPoints;
-                storedUser.points = userPoints;
-                saveAndSync();
-                updatePointsDisplay();
-                updateRanking();
-            }
-        } catch (e) {
-            console.error("Erro na recuperação de pontos:", e);
+            console.error('Erro em saveAndSync:', error);
         }
     };
 
@@ -1852,17 +1703,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync (Local and Firestore)
+        // Global Sync
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
-        
-        if (dbAvailable) {
-            db.collection('global_history').add({
-                ...transaction,
-                serverTime: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
-        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();
@@ -1917,17 +1761,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync (Local and Firestore)
+        // Global Sync
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
-
-        if (dbAvailable) {
-            db.collection('global_history').add({
-                ...transaction,
-                serverTime: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
-        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();
@@ -1986,17 +1823,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!storedUser.history) storedUser.history = [];
         storedUser.history.unshift(transaction);
         
-        // Global Sync (Local and Firestore)
+        // Global Sync
         const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
         globalHistory.unshift(transaction);
         localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
-
-        if (dbAvailable) {
-            db.collection('global_history').add({
-                ...transaction,
-                serverTime: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(e => console.error("Erro ao sincronizar histórico global:", e));
-        }
         
         localStorage.setItem('moura_leite_user', JSON.stringify(storedUser));
         saveAndSync();
@@ -2072,7 +1902,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     saveAndSync();
-    healUserPoints();
     updateCheckinUI();
     updatePointsDisplay();
     updateRanking();
