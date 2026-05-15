@@ -610,6 +610,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         expiresAt: (surprise && safeDuration > 0) ? (missions[index].expiresAt || new Date(Date.now() + safeDuration * 3600000).toISOString()) : null,
                         updatedAt: new Date().toISOString()
                     };
+                    
+                    // Firestore won't accept undefined values, so we clean the object
+                    Object.keys(updatedMission).forEach(key => {
+                        if (updatedMission[key] === undefined) {
+                            delete updatedMission[key];
+                        }
+                    });
                     missions[index] = updatedMission;
                     localStorage.setItem('moura_leite_missions', JSON.stringify(missions));
 
