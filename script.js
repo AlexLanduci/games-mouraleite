@@ -380,22 +380,29 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const seedDefaultMissions = () => {
-        if (!localStorage.getItem('moura_leite_seeded_v1')) {
+        const SEED_VERSION = 'moura_leite_seeded_v2';
+        if (!localStorage.getItem(SEED_VERSION)) {
             const defaults = [
                 { id: 'sys_checkin', name: 'Check-in Diário', frequency: 'daily', points: 1, validationType: 'button', active: true, surprise: false, description: 'Garanta seu ponto diário apenas acessando o portal.', icon: 'fa-calendar-check', color: '#1976d2', createdAt: new Date().toISOString() },
                 { id: 'sys_lunch', name: 'Integração entre Times', frequency: 'weekly', points: 5, validationType: 'photo', active: true, surprise: false, description: 'Almoço com você + 2 pessoas de departamentos diferentes.', icon: 'fa-people-arrows', color: '#f57c00', createdAt: new Date().toISOString() },
                 { id: 'sys_reuniao', name: 'Reunião de Integração', frequency: 'weekly', points: 8, validationType: 'photo', active: true, surprise: false, description: 'Participe de um encontro com colegas de outro setor.', icon: 'fa-handshake', color: '#4caf50', createdAt: new Date().toISOString() },
                 { id: 'sys_embaixador', name: 'Embaixador Digital', frequency: 'monthly', points: 15, validationType: 'link', active: true, surprise: false, description: 'Compartilhe o novo lançamento da Moura Leite no seu LinkedIn pessoal.', icon: 'fa-brands fa-linkedin', color: '#0077b5', createdAt: new Date().toISOString() },
                 { id: 'sys_vivaengage', name: 'Engajamento Viva Engage', frequency: 'monthly', points: 12, validationType: 'link', active: true, surprise: false, description: 'Faça uma postagem no Viva Engage da empresa.', icon: 'fa-share-nodes', color: '#7b2cbf', createdAt: new Date().toISOString() },
-                { id: 'sys_jogos', name: 'Dinâmica de Jogos', frequency: 'weekly', points: 20, validationType: 'button', active: true, surprise: false, description: 'Participe da dinâmica de interação dos nossos jogos de tabuleiro durante a semana. Procure o Alex ou a Mariana do RH para alinhar o dia e horário.', icon: 'fa-people-group', color: '#F1863B', createdAt: new Date().toISOString() }
+                { id: 'sys_jogos', name: 'Dinâmica de Jogos', frequency: 'weekly', points: 20, validationType: 'photo', active: true, surprise: false, description: 'Participe da dinâmica de interação dos nossos jogos de tabuleiro durante a semana. Procure o Alex ou a Mariana do RH para alinhar o dia e horário.', icon: 'fa-people-group', color: '#F1863B', createdAt: new Date().toISOString() }
             ];
             
             let missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
             defaults.forEach(d => {
-                if (!missions.find(m => m.id === d.id)) missions.push(d);
+                const idx = missions.findIndex(m => m.id === d.id);
+                if (idx === -1) {
+                    missions.push(d);
+                } else {
+                    // Update system missions properties
+                    missions[idx] = { ...missions[idx], ...d };
+                }
             });
             localStorage.setItem('moura_leite_missions', JSON.stringify(missions));
-            localStorage.setItem('moura_leite_seeded_v1', 'true');
+            localStorage.setItem(SEED_VERSION, 'true');
             
             if (dbAvailable && missionsCollection) {
                 defaults.forEach(d => missionsCollection.doc(d.id).set(d, {merge: true}));
@@ -1229,7 +1236,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     item: `${itemName} (-${price} pts)`,
                     date: now.toLocaleDateString('pt-BR'),
                     time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-                    status: 'Concluído'
+                    status: 'Concluído',
+                    serverTime: getServerTime()
                 };
 
                 if (!storedUser.history) storedUser.history = [];
@@ -1346,7 +1354,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 item: `Boost de Pontos 2x (24h) (-${price} pts)`,
                 date: now.toLocaleDateString('pt-BR'),
                 time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-                status: 'Ativo'
+                status: 'Ativo',
+                serverTime: serverNow.getTime()
             };
             if (!storedUser.history) storedUser.history = [];
             storedUser.history.unshift(transaction);
@@ -1386,17 +1395,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyHeader = document.querySelector('#historico-page .history-table thead tr');
         const isAdmin = storedUser.email === 'admin@mouraleite.com.br';
         
-        const historyData = isAdmin 
-            ? (JSON.parse(localStorage.getItem('moura_leite_global_history')) || [])
-            : (JSON.parse(localStorage.getItem('moura_leite_user'))?.history || []);
+        let historyData = [];
+
+        if (isAdmin) {
+            // Aggregate history from ALL users for Admin
+            const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
+            allUsers.forEach(u => {
+                if (u.history && Array.isArray(u.history)) {
+                    u.history.forEach(tx => {
+                        // Ensure transaction has user info for global view
+                        const txWithUser = { ...tx, user: tx.user || u.username };
+                        historyData.push(txWithUser);
+                    });
+                }
+            });
+            // Sort by serverTime (descending) or date/time
+            historyData.sort((a, b) => (b.serverTime || 0) - (a.serverTime || 0));
+        } else {
+            // Regular user only sees their own history
+            historyData = (JSON.parse(localStorage.getItem('moura_leite_user'))?.history || []);
+        }
         
         if (!historyBody || !historyHeader) return;
 
-        // Update Header for Admin
+        // Update Header
         if (isAdmin) {
             historyHeader.innerHTML = `
                 <th>Usuário</th>
                 <th>Item</th>
+                <th>Evidência</th>
                 <th>Data</th>
                 <th>Horário</th>
                 <th>Status</th>
@@ -1411,19 +1438,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (historyData.length === 0) {
-            const colCount = isAdmin ? 5 : 4;
-            historyBody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; padding: 2rem; color: #999;">Nenhum resgate realizado ainda.</td></tr>`;
+            const colCount = isAdmin ? 6 : 4;
+            historyBody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; padding: 2rem; color: #999;">Nenhum registro encontrado ainda.</td></tr>`;
             return;
         }
 
         historyBody.innerHTML = historyData.map(tx => `
             <tr>
                 ${isAdmin ? `<td><strong>${tx.user}</strong></td>` : ''}
-                <td>
-                    ${tx.item} 
-                    ${tx.photo ? `<button class="view-photo-btn" onclick="viewPhoto('${tx.photo}')" title="Ver Comprovante">📸</button>` : ''}
-                    ${tx.link ? `<a href="${tx.link}" target="_blank" class="view-link-btn" title="Ver Publicação" style="text-decoration:none; margin-left:5px;">🔗</a>` : ''}
-                </td>
+                <td>${tx.item}</td>
+                ${isAdmin ? `
+                    <td style="text-align:center;">
+                        ${tx.photo ? `<button class="view-photo-btn" onclick="viewPhoto('${tx.photo}')" title="Ver Comprovante">📸</button>` : ''}
+                        ${tx.link ? `<a href="${tx.link}" target="_blank" class="view-link-btn" title="Ver Publicação" style="text-decoration:none; margin-left:5px;">🔗</a>` : ''}
+                        ${(!tx.photo && !tx.link) ? '<span style="color:#ccc">-</span>' : ''}
+                    </td>
+                ` : ''}
                 <td>${tx.date}</td>
                 <td>${tx.time}</td>
                 <td><span class="status-badge">${tx.status}</span></td>
@@ -1587,6 +1617,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Keep custom mission key in sync
                 storedUser['lastCustomDaily_sys_checkin'] = todayStr;
                 
+                // Add transaction to history
+                const serverTimestamp = getServerTime();
+                const transaction = {
+                    user: storedUser.username,
+                    item: `Missão: Check-in Diário (+${earned} pts)`,
+                    date: new Date(serverTimestamp).toLocaleDateString('pt-BR'),
+                    time: new Date(serverTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    status: 'Concluído',
+                    serverTime: serverTimestamp
+                };
+
+                if (!storedUser.history) storedUser.history = [];
+                storedUser.history.unshift(transaction);
+
+                const globalHistory = JSON.parse(localStorage.getItem('moura_leite_global_history')) || [];
+                globalHistory.unshift(transaction);
+                localStorage.setItem('moura_leite_global_history', JSON.stringify(globalHistory));
+
                 saveAndSync();
                 updatePointsDisplay();
                 updateRanking();
@@ -1852,9 +1900,27 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.viewPhoto = (photoData) => {
+        // Create viewer modal
         const viewer = document.createElement('div');
-        viewer.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; display:flex; align-items:center; justify-content:center; cursor:pointer;';
-        viewer.innerHTML = `<img src="${photoData}" style="max-width:90%; max-height:90%; border-radius:10px; border: 5px solid white;">`;
+        viewer.id = 'photo-viewer-modal';
+        viewer.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:10000; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer;';
+        
+        const img = document.createElement('img');
+        img.src = photoData;
+        img.style = 'max-width:95%; max-height:85%; border-radius:12px; border: 4px solid white; box-shadow: 0 0 30px rgba(0,0,0,0.5); object-fit: contain;';
+        
+        const closeBtn = document.createElement('div');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style = 'position:absolute; top:20px; right:30px; color:white; font-size:40px; font-weight:bold; cursor:pointer;';
+        
+        const tip = document.createElement('p');
+        tip.textContent = 'Clique em qualquer lugar para fechar';
+        tip.style = 'color:#aaa; margin-top:15px; font-size:14px;';
+
+        viewer.appendChild(closeBtn);
+        viewer.appendChild(img);
+        viewer.appendChild(tip);
+        
         viewer.onclick = () => viewer.remove();
         document.body.appendChild(viewer);
     };
