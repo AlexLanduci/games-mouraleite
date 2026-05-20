@@ -405,7 +405,17 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem(SEED_VERSION, 'true');
             
             if (dbAvailable && missionsCollection) {
-                defaults.forEach(d => missionsCollection.doc(d.id).set(d, {merge: true}));
+                defaults.forEach(async d => {
+                    try {
+                        const docRef = missionsCollection.doc(d.id);
+                        const docSnap = await docRef.get();
+                        if (!docSnap.exists) {
+                            await docRef.set(d, {merge: true});
+                        }
+                    } catch (e) {
+                        console.error('Error seeding mission:', e);
+                    }
+                });
             }
         }
     };
@@ -1414,6 +1424,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initBoostUI();
 
+    window.rejectTransaction = async (email, originalIndex) => {
+        if (!confirm('Deseja realmente recusar este crédito e remover os pontos do usuário?')) return;
+        
+        try {
+            const userDoc = await db.collection("users").doc(email).get();
+            if (!userDoc.exists) return alert("Usuário não encontrado no banco.");
+            
+            const userData = userDoc.data();
+            const history = userData.history || [];
+            
+            if (originalIndex < 0 || originalIndex >= history.length) {
+                return alert("Transação não encontrada no histórico do usuário.");
+            }
+            
+            const tx = history[originalIndex];
+            if (tx.status === 'Recusado') return alert("Esta transação já foi recusada.");
+            
+            // Parse points from item string
+            let pointsToDeduct = 0;
+            const earnedMatch = tx.item.match(/\(\+(\d+)\s+pts\)/);
+            if (earnedMatch) {
+                pointsToDeduct = parseInt(earnedMatch[1]);
+            } else {
+                // Try legacy parsing
+                const pointValues = {
+                    'Check-in Diário': 1,
+                    'Almoço Moura Leite': 5,
+                    'Reunião de Integração': 8,
+                    'Embaixador Digital': 15,
+                    'Engajamento Viva Engage': 12,
+                    'Dinâmica de Jogos': 20
+                };
+                for (const [name, val] of Object.entries(pointValues)) {
+                    if (tx.item.includes(name)) {
+                        pointsToDeduct = val;
+                        break;
+                    }
+                }
+                // Custom missions legacy parsing
+                const missions = JSON.parse(localStorage.getItem('moura_leite_missions')) || [];
+                const matchedMission = missions.find(m => tx.item.includes(m.name));
+                if (matchedMission) {
+                    pointsToDeduct = matchedMission.points || 0;
+                }
+            }
+            
+            // Update transaction status
+            history[originalIndex].status = 'Recusado';
+            
+            // Update points
+            const newPoints = Math.max(0, (parseInt(userData.points) || 0) - pointsToDeduct);
+            
+            await db.collection("users").doc(email).update({
+                history: history,
+                points: newPoints
+            });
+            
+            alert(`Transação recusada e ${pointsToDeduct} pontos removidos com sucesso!`);
+            
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao recusar transação.");
+        }
+    };
+
     // History Rendering
     const renderHistory = () => {
         const historyBody = document.querySelector('#historico-page .history-table tbody');
@@ -1427,9 +1502,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const allUsers = JSON.parse(localStorage.getItem('moura_leite_all_users')) || [];
             allUsers.forEach(u => {
                 if (u.history && Array.isArray(u.history)) {
-                    u.history.forEach(tx => {
+                    u.history.forEach((tx, i) => {
                         // Ensure transaction has user info for global view
-                        const txWithUser = { ...tx, user: tx.user || u.username };
+                        const txWithUser = { ...tx, user: tx.user || u.username, email: u.email, originalIndex: i };
                         historyData.push(txWithUser);
                     });
                 }
@@ -1452,6 +1527,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th>Data</th>
                 <th>Horário</th>
                 <th>Status</th>
+                <th>Ações</th>
             `;
         } else {
             historyHeader.innerHTML = `
@@ -1482,6 +1558,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${tx.date}</td>
                 <td>${tx.time}</td>
                 <td><span class="status-badge">${tx.status}</span></td>
+                ${isAdmin ? `
+                    <td style="text-align:center;">
+                        ${(tx.status === 'Concluído' || tx.status === 'Validando') ? 
+                        `<button class="btn-buy" style="background:#d32f2f; padding:4px 8px; font-size:10px; border-radius:4px; color:#fff; border:none; cursor:pointer;" onclick="rejectTransaction('${tx.email}', ${tx.originalIndex})">Recusar</button>` 
+                        : '<span style="color:#ccc">-</span>'}
+                    </td>
+                ` : ''}
             </tr>
         `).join('');
     };
@@ -1672,6 +1755,31 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    const triggerCelebration = () => {
+        if (typeof confetti === 'function') {
+            confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#006837', '#F1863B', '#1976d2', '#f57c00']
+            });
+        }
+    };
+
+    const logSocialActivity = (action, icon) => {
+        if (!dbAvailable) return;
+        try {
+            db.collection('social_feed').add({
+                user: storedUser.username,
+                action: action,
+                icon: icon || 'fa-star',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (e) {
+            console.error('Erro no social feed:', e);
+        }
+    };
 
     // Custom Missions Handler
     document.addEventListener('click', (e) => {
